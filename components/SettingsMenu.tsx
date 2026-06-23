@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { seasonFromMonth, type Sky, type Weather } from "@/lib/weather";
+import { CloseIcon, SettingsIcon } from "./Icons";
 
 const SKIES: Sky[] = ["clear", "clouds", "fog", "rain", "snow", "storm"];
 
@@ -58,19 +59,20 @@ export default function SettingsMenu({
   );
 
   return (
-    <div className="absolute right-5 top-5 text-right">
+    <div className="anim-rise absolute right-5 top-5 text-right">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="rounded-md border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/80 backdrop-blur-sm hover:bg-white/10"
+        aria-label={open ? "Close" : "Settings"}
+        className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-white/70 backdrop-blur-xl transition hover:bg-white/10 hover:text-white active:scale-95"
       >
-        {open ? "Close" : "Settings"}
+        {open ? <CloseIcon className="h-4 w-4" /> : <SettingsIcon className="h-4 w-4" />}
       </button>
 
       {open && (
-        <div className="mt-2 w-64 space-y-3 rounded-lg border border-white/10 bg-black/50 p-4 text-left backdrop-blur-md">
+        <div className="anim-rise mt-2 w-64 space-y-3 rounded-2xl border border-white/10 bg-black/40 p-4 text-left shadow-2xl shadow-black/40 backdrop-blur-2xl">
           <div>
-            <div className="text-xs font-medium text-white/80">Sterzing, IT</div>
-            <div className="text-[11px] text-white/50">
+            <div className="text-xs font-medium text-white/85">Sterzing, IT</div>
+            <div className="text-[11px] text-white/45">
               {weather
                 ? `${Math.round(weather.tempC)}°C · ${weather.sky} · ${Math.round(
                     weather.windKmh,

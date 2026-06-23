@@ -2,14 +2,24 @@
 // reveals more of the trunk + branches (the tree "builds itself") and grows the
 // overall size, slowing as it gets bigger so early stars matter most.
 
-const BASE_SCALE = 0.45; // small but complete tree at 0 stars
-const MAX_SCALE = 1.5;
-const GROWTH_K = 0.3;
+const BASE_SCALE = 0.35; // small young tree at 0 stars
+const MAX_SCALE = 2.0;
+const GROWTH_K = 0.42;
 
-/** Overall tree scale for a given star count. Slows as it grows. */
+/** Overall tree scale for a given star count. Grows a lot, slowing as it ages. */
 export function treeScale(stars: number): number {
   const s = Math.max(0, stars);
   return Math.min(MAX_SCALE, BASE_SCALE + GROWTH_K * Math.log2(s + 1));
+}
+
+/**
+ * Fraction of the canopy's leaf clusters that are present, so foliage (and the
+ * branches it sits on) visibly fills in as stars arrive. 0 stars = sparse young
+ * tree; ~12+ stars = full crown.
+ */
+export function foliageFraction(stars: number): number {
+  const s = Math.max(0, stars);
+  return Math.min(1, 0.22 + s / 12);
 }
 
 /**

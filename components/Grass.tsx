@@ -24,7 +24,7 @@ const TMP = new THREE.Object3D();
  * Blades follow a slight dome and thin out toward the edge.
  */
 export function Grass({
-  count = 6000,
+  count = 4200,
   radius = 10.5,
   topY = 6.7,
   wind = 1,

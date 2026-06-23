@@ -9,6 +9,7 @@ import {
   ContactShadows,
   Cloud,
   Clouds,
+  Preload,
 } from "@react-three/drei";
 import * as THREE from "three";
 import { Island } from "./Island";
@@ -16,6 +17,8 @@ import { Tree } from "./Tree";
 import { Houses } from "./Houses";
 import { Bridges } from "./Bridges";
 import { Grass } from "./Grass";
+import { GrassClumps } from "./GrassClumps";
+import { Flora } from "./Flora";
 import { Birds } from "./Birds";
 import { Weather } from "./Weather";
 import { SceneRig } from "./SceneRig";
@@ -33,30 +36,53 @@ const CLOUD_LAYOUT = [
   { pos: [-50, 28, 26], bounds: [16, 5, 9], volume: 11, growth: 6 },
 ] as const;
 
-// The island is centered at the origin; its plateau top is near the upper bound.
-const TREE_Y = 6.8;
+// Island shrunk ~20%; the tree/grass sit on its (now lower) plateau.
+const ISLAND_SCALE = 0.8;
+const TREE_Y = 6.8 * ISLAND_SCALE;
 const TREE_BOOST = 1.15;
+const PLATEAU_Y = 6.7 * ISLAND_SCALE;
+const PLATEAU_R = 10 * ISLAND_SCALE;
 
 export default function Experience({
   stars,
   params,
   highlight = -1,
   fly = false,
+  onSelectHouse,
 }: {
   stars: number;
   params: SceneParams;
   highlight?: number;
   fly?: boolean;
+  onSelectHouse?: (i: number) => void;
 }) {
+  // Night factor (lights come on at dusk). Sun disc sits far along the sun dir.
+  const night = Math.min(1, Math.max(0, 1 - params.dayFactor * 1.5));
+  const sunDir = new THREE.Vector3(...params.sunPos).normalize();
+  const sunFar = sunDir.multiplyScalar(120);
+
   return (
     <Canvas
       shadows
-      dpr={[1, 2]}
+      dpr={[1, 1.75]}
       camera={{ position: [26, 18, 26], fov: 42, near: 0.1, far: 200 }}
-      gl={{ antialias: true }}
+      gl={{ antialias: true, powerPreference: "high-performance" }}
     >
       <Suspense fallback={null}>
         <SceneRig params={params} />
+
+        {/* The sun, sitting where it really is over Sterzing right now. */}
+        {params.dayFactor > 0.02 && (
+          <mesh position={sunFar.toArray()}>
+            <sphereGeometry args={[7, 24, 24]} />
+            <meshBasicMaterial
+              color={params.sunColor}
+              toneMapped={false}
+              transparent
+              opacity={0.5 + params.dayFactor * 0.5}
+            />
+          </mesh>
+        )}
 
         {/* A full ring of volumetric clouds; greyer + denser when overcast. */}
         <Clouds material={THREE.MeshBasicMaterial} limit={400}>
@@ -77,8 +103,10 @@ export default function Experience({
         <Birds count={16} />
 
         <Float speed={1.1} rotationIntensity={0.1} floatIntensity={0.5}>
-          <Island snow={params.snow} />
-          <Grass wind={params.wind} />
+          <Island snow={params.snow} scale={ISLAND_SCALE} />
+          <Grass wind={params.wind} topY={PLATEAU_Y} radius={PLATEAU_R + 0.5} />
+          <GrassClumps topY={PLATEAU_Y} radius={PLATEAU_R * 0.85} />
+          <Flora topY={PLATEAU_Y} radius={PLATEAU_R} />
           <group position={[0, TREE_Y, 0]} scale={TREE_BOOST}>
             <Tree
               stars={stars}
@@ -86,7 +114,13 @@ export default function Experience({
               leafColor={params.leafColor}
               snow={params.snow}
             >
-              <Houses stars={stars} wind={params.wind} highlight={highlight} />
+              <Houses
+                stars={stars}
+                wind={params.wind}
+                highlight={highlight}
+                night={night}
+                onSelect={onSelectHouse}
+              />
               <Bridges stars={stars} />
             </Tree>
           </group>
@@ -99,12 +133,13 @@ export default function Experience({
         />
 
         <ContactShadows
-          position={[0, -9.4, 0]}
+          position={[0, -9.4 * ISLAND_SCALE, 0]}
           opacity={0.3}
-          scale={42}
+          scale={42 * ISLAND_SCALE}
           blur={2.6}
           far={20}
         />
+        <Preload all />
       </Suspense>
 
       {fly ? (

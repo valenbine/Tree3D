@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { animated, useSpring } from "@react-spring/three";
-import { treeScale } from "@/lib/growth";
+import { foliageFraction, treeScale } from "@/lib/growth";
 
 /**
  * The hero tree. It ALWAYS looks like a complete, leafy tree — growth is just
@@ -28,10 +28,12 @@ export function Tree({
   const { scene } = useGLTF("/models/tree.glb");
   const swayRef = useRef<THREE.Group>(null);
   const leafMats = useRef<THREE.MeshStandardMaterial[]>([]);
+  const leafMeshes = useRef<THREE.Mesh[]>([]);
 
   const tree = useMemo(() => {
     const root = scene.clone(true);
     leafMats.current = [];
+    leafMeshes.current = [];
     root.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
       obj.castShadow = true;
@@ -41,10 +43,18 @@ export function Tree({
       if (obj.name.startsWith("Leaf")) {
         mat.roughness = 0.75;
         leafMats.current.push(mat);
+        leafMeshes.current.push(obj);
       }
     });
     return root;
   }, [scene]);
+
+  // Foliage fills in with stars: reveal a growing fraction of the leaf clusters.
+  useEffect(() => {
+    const n = leafMeshes.current.length;
+    const reveal = Math.ceil(n * foliageFraction(stars));
+    leafMeshes.current.forEach((m, i) => (m.visible = i < reveal));
+  }, [stars, tree]);
 
   // Seasonal tint + frost on the foliage.
   useMemo(() => {

@@ -5,9 +5,25 @@ import * as THREE from "three";
  * `cutoffY` (in the geometry's own space). Used to cut the long hanging weight
  * off the wood platform so only the flat deck remains. Copies position/normal/uv.
  */
+/** Keep only triangles whose centroid Y is within [loY, hiY]. */
+export function trimBandY(
+  geo: THREE.BufferGeometry,
+  loY: number,
+  hiY: number,
+): THREE.BufferGeometry {
+  return trimPredicate(geo, (cy) => cy > loY && cy < hiY);
+}
+
 export function trimAboveY(
   geo: THREE.BufferGeometry,
   cutoffY: number,
+): THREE.BufferGeometry {
+  return trimPredicate(geo, (cy) => cy > cutoffY);
+}
+
+function trimPredicate(
+  geo: THREE.BufferGeometry,
+  keep: (centroidY: number) => boolean,
 ): THREE.BufferGeometry {
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
   const nrm = geo.getAttribute("normal") as THREE.BufferAttribute | undefined;
@@ -25,7 +41,7 @@ export function trimAboveY(
     const b = vi(t, 1);
     const c = vi(t, 2);
     const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
-    if (cy <= cutoffY) continue;
+    if (!keep(cy)) continue;
     for (const idx of [a, b, c]) {
       P.push(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
       if (nrm) N.push(nrm.getX(idx), nrm.getY(idx), nrm.getZ(idx));

@@ -5,7 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import Hud from "@/components/Hud";
 import SettingsMenu, { type ManualDate } from "@/components/SettingsMenu";
 import SearchBar from "@/components/SearchBar";
-import { nameForIndex } from "@/lib/names";
+import HouseInterior from "@/components/HouseInterior";
+import LoadingOverlay from "@/components/LoadingOverlay";
+import { FlyIcon } from "@/components/Icons";
+import { nameForHouse, type Stargazer } from "@/lib/stargazers";
+
+// Toggle the in-scene star editor via env (NEXT_PUBLIC_DEV_CONTROLS=true).
+const DEV_CONTROLS = process.env.NEXT_PUBLIC_DEV_CONTROLS === "true";
 import {
   manualWeather,
   sceneFromWeather,
@@ -15,23 +21,13 @@ import {
 
 const Experience = dynamic(() => import("@/components/Experience"), {
   ssr: false,
-  loading: () => <LoadingScreen />,
+  loading: () => <div className="absolute inset-0 bg-[#0b1320]" />,
 });
-
-function LoadingScreen() {
-  return (
-    <div className="absolute inset-0 grid place-items-center bg-[#0b1320]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-canopy" />
-        <p className="text-sm text-white/50">Growing the tree…</p>
-      </div>
-    </div>
-  );
-}
 
 export default function Home() {
   const [stars, setStars] = useState(0);
   const [starsLive, setStarsLive] = useState(false);
+  const [stargazers, setStargazers] = useState<Stargazer[] | null>(null);
 
   // Weather: live reading from Sterzing, plus a manual override mode.
   const [liveWeather, setLiveWeather] = useState<Weather | null>(null);
@@ -39,6 +35,7 @@ export default function Home() {
   const [manualSky, setManualSky] = useState<Sky>("clear");
   const [search, setSearch] = useState("");
   const [fly, setFly] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
   const now = new Date();
   const [date, setDate] = useState<ManualDate>({
     year: now.getFullYear(),
@@ -48,13 +45,16 @@ export default function Home() {
   });
 
   useEffect(() => {
-    fetch("/api/stargazers")
-      .then((r) => r.json())
-      .then((d) => {
-        setStars(typeof d.stars === "number" ? d.stars : 0);
-        setStarsLive(Boolean(d.live));
-      })
-      .catch(() => {});
+    // Poll the repo's star count every minute so new stars grow the tree live.
+    const loadStars = () =>
+      fetch("/api/stargazers")
+        .then((r) => r.json())
+        .then((d) => {
+          if (typeof d.stars === "number") setStars(d.stars);
+          setStarsLive(Boolean(d.live));
+          setStargazers(Array.isArray(d.stargazers) ? d.stargazers : null);
+        })
+        .catch(() => {});
 
     const loadWeather = () =>
       fetch("/api/weather")
@@ -70,9 +70,16 @@ export default function Home() {
           }),
         )
         .catch(() => {});
+
+    loadStars();
     loadWeather();
-    const id = setInterval(loadWeather, 10 * 60 * 1000);
-    return () => clearInterval(id);
+    // Poll every minute in production; skip in dev so the +/- editor isn't reset.
+    const starId = DEV_CONTROLS ? null : setInterval(loadStars, 60 * 1000);
+    const weatherId = setInterval(loadWeather, 10 * 60 * 1000);
+    return () => {
+      if (starId) clearInterval(starId);
+      clearInterval(weatherId);
+    };
   }, []);
 
   const weather: Weather | null =
@@ -101,9 +108,10 @@ export default function Home() {
   let matchName: string | null = null;
   if (q) {
     for (let i = 0; i < stars; i++) {
-      if (nameForIndex(i).toLowerCase().includes(q)) {
+      const nm = nameForHouse(i, stargazers);
+      if (nm.toLowerCase().includes(q)) {
         highlight = i;
-        matchName = nameForIndex(i);
+        matchName = nm;
         break;
       }
     }
@@ -111,28 +119,44 @@ export default function Home() {
 
   return (
     <main className="relative h-full w-full overflow-hidden">
+      <LoadingOverlay />
       <Experience
         stars={stars}
         params={params}
         highlight={highlight}
         fly={fly}
+        onSelectHouse={setSelected}
       />
       <SearchBar query={search} onQuery={setSearch} match={matchName} />
 
       <button
         onClick={() => setFly((f) => !f)}
-        className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-md border border-white/10 bg-black/30 px-4 py-1.5 text-xs text-white/80 backdrop-blur-sm hover:bg-white/10"
+        className={`anim-rise-x absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-xs backdrop-blur-xl transition active:scale-95 ${
+          fly
+            ? "border-white/25 bg-white/15 text-white"
+            : "border-white/10 bg-white/[0.06] text-white/70 hover:bg-white/10 hover:text-white"
+        }`}
       >
-        {fly ? "Exit fly mode" : "🕊 Fly around"}
+        <FlyIcon className="h-3.5 w-3.5" />
+        {fly ? "Exit fly mode" : "Fly around"}
       </button>
       {fly && (
-        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 text-center text-[11px] text-white/50">
-          WASD / arrows to move · drag to look · R/F up &amp; down
+        <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2 text-center text-[11px] text-white/45">
+          WASD / arrows to move · drag to look · R / F up &amp; down
         </div>
+      )}
+
+      {selected !== null && (
+        <HouseInterior
+          index={selected}
+          stargazer={stargazers?.[selected] ?? null}
+          onClose={() => setSelected(null)}
+        />
       )}
       <Hud
         stars={stars}
         live={starsLive}
+        devControls={DEV_CONTROLS}
         onChange={(n) => setStars(Math.max(0, n))}
       />
       <SettingsMenu

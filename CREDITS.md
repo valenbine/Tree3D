@@ -27,3 +27,4 @@
 | ------------------|---------------| ------------------------------------------------------------------------------| --------------|
 | TREE              | Kyuu          | https://sketchfab.com/3d-models/tree-858252c486b444288c477ee49325a905         | CC Attribution|
 | Casual Village    | Kelni         | https://sketchfab.com/3d-modelscasual-village-buildings-pack                  | CC-BY-4.0     |
+| Stylized Lantern  | Izzy          | https://sketchfab.com/3d-models/stylized-lantern                              | CC-BY-4.0     |
