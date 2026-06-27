@@ -7,8 +7,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import gsap from "gsap";
 import { animated, useSpring } from "@react-spring/three";
-import { bonsaiNodes, makeTaperedTubeGeometry, trunkCenterAt } from "@/lib/bonsai";
-import { treeScale } from "@/lib/growth";
+import { bonsaiNodes, makeTaperedTubeGeometry, spineAt } from "@/lib/bonsai";
+import { treeHeight, trunkBaseRadius, trunkHeight } from "@/lib/growth";
 import { MAX_HOUSES } from "@/lib/layout";
 import { deckRadius, type Tier } from "@/lib/rarity";
 
@@ -386,7 +386,7 @@ function makeLeafSprigGeometry(): THREE.BufferGeometry {
   shape.bezierCurveTo(0.15, 0.03, 0.12, 0.3, 0, 0.4);
   shape.bezierCurveTo(-0.12, 0.3, -0.15, 0.03, 0, -0.05);
   const geos: THREE.BufferGeometry[] = [];
-  const N = 5;
+  const N = 6;
   for (let i = 0; i < N; i++) {
     const g = new THREE.ShapeGeometry(shape, 3);
     g.rotateX(-0.5 - (i % 3) * 0.22); // tilt + droop
@@ -583,52 +583,69 @@ export function Tree({
       .lerp(new THREE.Color("#ffffff"), Math.min(1, snow * 0.4));
   }, [materials, leafColor, snow]);
 
+  // The trunk is now a TALL spine sampled from the ground to the top active
+  // platform (+ crown margin). It thickens with height but stays thinner than the
+  // helix radius (5.2) so it never pokes through a platform. Regenerates as the
+  // tower grows.
+  const trunkH = trunkHeight(stars); // trunk tip ends inside the crown
+  const trunkR = trunkBaseRadius(stars); // thin, clean trunk
   const trunkPieces = useMemo(() => {
-    // ONE solid, round trunk (no overlapping strands) sampled along the spine,
-    // thick at the base and tapering up; the bark shader carries the detail.
+    const H = trunkH;
+    const baseR = trunkR;
+    const segs = THREE.MathUtils.clamp(Math.round(H * 2), 24, 220);
     const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= 16; i++) pts.push(trunkCenterAt(i / 16));
+    for (let i = 0; i <= segs; i++) pts.push(spineAt((i / segs) * H));
     return [
       {
         key: "trunk",
-        geometry: makeTaperedTubeGeometry(pts, 0.66, 0.13, 96, 20, 0.5, 1.15),
+        geometry: makeTaperedTubeGeometry(pts, baseR, baseR * 0.24, segs, 18, 0.5, 0.7),
         material: materials.bark,
       },
     ];
-  }, [materials]);
+  }, [materials, trunkH, trunkR]);
 
   const rootPieces = useMemo(() => {
+    const baseR = trunkR;
+    const spread = 1 + baseR * 1.3;
     return Array.from({ length: 10 }, (_, i) => {
       const a = i * 0.628 + 0.2;
-      const p0 = trunkCenterAt(0).add(new THREE.Vector3(Math.cos(a) * 0.28, -0.03, Math.sin(a) * 0.28));
-      const p1 = new THREE.Vector3(Math.cos(a) * 1.1, -0.12, Math.sin(a) * 0.85);
-      const p2 = new THREE.Vector3(Math.cos(a) * (1.85 + (i % 3) * 0.18), -0.2, Math.sin(a) * (1.45 + (i % 2) * 0.14));
+      const p0 = spineAt(0).add(
+        new THREE.Vector3(Math.cos(a) * baseR * 0.5, -0.03, Math.sin(a) * baseR * 0.5),
+      );
+      const p1 = new THREE.Vector3(Math.cos(a) * spread * 0.6, -0.12, Math.sin(a) * spread * 0.6);
+      const p2 = new THREE.Vector3(
+        Math.cos(a) * (spread + (i % 3) * 0.18),
+        -0.2,
+        Math.sin(a) * (spread * 0.78 + (i % 2) * 0.14),
+      );
       return {
         key: `root-${i}`,
-        geometry: makeTaperedTubeGeometry([p0, p1, p2], 0.24, 0.06, 18, 7, i * 0.7),
+        geometry: makeTaperedTubeGeometry([p0, p1, p2], baseR * 0.35, 0.06, 18, 7, i * 0.7),
       };
     });
-  }, []);
+  }, [trunkH, trunkR]);
 
   // A few old, sawn-off branch stubs jutting from the trunk — each a short tapered
   // limb capped with an annual-ring disc (the cut face). Deterministic detail that
   // breaks up the "perfect pipe" silhouette.
   const trunkStubPieces = useMemo(() => {
+    const H = trunkH;
+    const baseR = trunkR;
     const specs = [
-      { u: 0.16, ang: 0.6, len: 0.5, r: 0.2, up: 0.3 },
-      { u: 0.26, ang: 3.7, len: 0.34, r: 0.14, up: 0.36 },
-      { u: 0.33, ang: 2.3, len: 0.42, r: 0.17, up: 0.42 },
-      { u: 0.47, ang: 4.5, len: 0.34, r: 0.14, up: 0.5 },
-      { u: 0.6, ang: 1.3, len: 0.3, r: 0.12, up: 0.54 },
-      { u: 0.74, ang: 5.6, len: 0.26, r: 0.1, up: 0.6 },
-    ];
-    const trunkRadiusAt = (u: number) =>
-      THREE.MathUtils.lerp(0.13, 0.66, Math.pow(1 - u, 0.72));
+      { y: 1.4, ang: 0.6, len: 0.6, r: 0.22, up: 0.3 },
+      { y: 2.4, ang: 3.7, len: 0.42, r: 0.16, up: 0.36 },
+      { y: 3.4, ang: 2.3, len: 0.5, r: 0.18, up: 0.42 },
+      { y: 4.6, ang: 4.5, len: 0.4, r: 0.15, up: 0.5 },
+      { y: 6.0, ang: 1.3, len: 0.36, r: 0.13, up: 0.54 },
+      { y: 7.6, ang: 5.6, len: 0.32, r: 0.12, up: 0.6 },
+    ].filter((s) => s.y < H - 0.5);
+    const trunkRadiusAt = (y: number) =>
+      Math.max(0.12, baseR * Math.pow(1 - THREE.MathUtils.clamp(y / H, 0, 1), 0.72));
     return specs.map((s, i) => {
-      const center = trunkCenterAt(s.u);
+      const center = spineAt(s.y);
       const radial = new THREE.Vector3(Math.cos(s.ang), 0, Math.sin(s.ang));
       const dir = radial.clone().add(new THREE.Vector3(0, s.up, 0)).normalize();
-      const rT = trunkRadiusAt(s.u);
+      const rT = trunkRadiusAt(s.y);
       const base = center.clone().addScaledVector(radial, rT * 0.5);
       const mid = center.clone().addScaledVector(dir, rT * 0.8 + s.len * 0.45);
       const tip = center.clone().addScaledVector(dir, rT * 0.85 + s.len);
@@ -648,7 +665,7 @@ export function Tree({
         capQuat: [quat.x, quat.y, quat.z, quat.w] as [number, number, number, number],
       };
     });
-  }, []);
+  }, [trunkH, trunkR]);
 
   const branchPieces = useMemo(() => {
     return nodes.map((node) => {
@@ -690,8 +707,8 @@ export function Tree({
     }
     return {
       cy: (minY + maxY) / 2 + 0.6,
-      rx: maxReach + 3.35,
-      ry: (maxY - minY) / 2 + 3.75,
+      rx: maxReach + 1.8,
+      ry: (maxY - minY) / 2 + 2.8,
     };
   }, [active, nodes, stargazers]);
 
@@ -747,13 +764,22 @@ export function Tree({
       return false;
     };
 
-    // Crown reach — how far the boughs spread (envelops the house cluster + margin).
-    let maxReach = 3.6;
+    // The crown is a rounded, organic mass that CAPS the trunk tip and wraps the
+    // platforms: foliage from just below the lowest platform up to an apex ABOVE
+    // the trunk (so the trunk never pokes out bare), fullest toward the top.
+    let lowPlatY = Infinity;
+    let maxReach = 3.2;
     for (let i = 0; i < active; i++) {
       const t = nodes[i].tip;
       maxReach = Math.max(maxReach, Math.hypot(t.x, t.z) + deckRadius(i, stargazers));
+      lowPlatY = Math.min(lowPlatY, nodes[i].base.y);
     }
-    const RX = maxReach + 3.35;
+    if (!isFinite(lowPlatY)) lowPlatY = 2;
+    const trunkTopY = trunkHeight(stars); // the trunk tip the crown must cap
+    const apexY = treeHeight(stars); // crown apex, ABOVE the tip
+    const cBot = Math.max(1.0, lowPlatY - 0.8); // foliage starts just below lowest deck
+    const cRX = maxReach + 1.0; // horizontal foliage radius (wraps the platforms)
+    const span = Math.max(2, apexY - cBot);
     const GA = Math.PI * (3 - Math.sqrt(5));
 
     // === Recursive crown: branches that FORK again and again, like a real tree.
@@ -779,10 +805,10 @@ export function Tree({
         .multiplyScalar(Math.cos(ang))
         .addScaledVector(p2, Math.sin(ang))
         .normalize();
-      return dir.clone().applyAxisAngle(axis, spread).addScaledVector(UP, 0.16).normalize();
+      return dir.clone().applyAxisAngle(axis, spread).addScaledVector(UP, 0.28).normalize();
     };
     const addLeaf = (p: THREE.Vector3) => {
-      const scl = 0.55 + rnd() * 0.5;
+      const scl = 0.4 + rnd() * 0.32; // small leaves
       if (blocked(p, scl)) return; // never on a house/bridge
       sprigs.push({
         pos: p,
@@ -791,7 +817,7 @@ export function Tree({
       });
     };
 
-    let budget = 3200; // safety cap on total branch segments (perf)
+    let budget = THREE.MathUtils.clamp(Math.round(span * 90), 4200, 9000); // segment cap (perf)
     const grow = (
       pos: THREE.Vector3,
       dir: THREE.Vector3,
@@ -805,31 +831,75 @@ export function Tree({
       if (blocked(end, rad * 3 + 0.25)) return; // carve around houses/bridges
       const mid = pos.clone().addScaledVector(dir, len * 0.5);
       branchGeos.push(makeTaperedTubeGeometry([pos, mid, end], rad, rad * 0.66, 3, 4, seed * 0.7));
-      // leaf tufts thicken toward the fine outer twigs
-      if (depth <= 2) addLeaf(end.clone().addScaledVector(dir, 0.1));
-      if (depth <= 1)
-        addLeaf(end.clone().add(new THREE.Vector3((rnd() - 0.5) * 0.3, -0.1, (rnd() - 0.5) * 0.3)));
-      if (depth <= 0 || len < 0.38) {
+      // dense small-leaf tufts, thickening toward the fine outer twigs
+      if (depth <= 3) addLeaf(end.clone().addScaledVector(dir, 0.08));
+      if (depth <= 2)
+        addLeaf(end.clone().add(new THREE.Vector3((rnd() - 0.5) * 0.24, 0.04, (rnd() - 0.5) * 0.24)));
+      if (depth <= 1) {
+        addLeaf(end.clone().add(new THREE.Vector3((rnd() - 0.5) * 0.3, -0.08, (rnd() - 0.5) * 0.3)));
+        addLeaf(end.clone().addScaledVector(dir, 0.12));
+      }
+      if (depth <= 0 || len < 0.34) {
         addLeaf(end);
-        addLeaf(end.clone().addScaledVector(dir, 0.14));
+        addLeaf(end.clone().addScaledVector(dir, 0.12));
+        addLeaf(end.clone().add(new THREE.Vector3((rnd() - 0.5) * 0.2, -0.06, (rnd() - 0.5) * 0.2)));
         return; // terminal twig
       }
       const n = depth >= 3 ? (rnd() < 0.5 ? 3 : 2) : 2;
       for (let c = 0; c < n; c++) {
-        grow(end, childDir(dir, 0.42 + rnd() * 0.5), len * (0.62 + rnd() * 0.16), rad * 0.7, depth - 1);
+        // tighter spread → a tidier, less sprawly crown
+        grow(end, childDir(dir, 0.3 + rnd() * 0.4), len * (0.62 + rnd() * 0.16), rad * 0.68, depth - 1);
       }
     };
 
-    // primaries spray outward from several heights on the upper trunk → boughs
-    // that fill the crown around the houses.
-    const PRIMARY = 10;
-    for (let i = 0; i < PRIMARY; i++) {
-      const u = 0.48 + (i % 4) * 0.12 + rnd() * 0.05;
-      const sp = trunkCenterAt(u);
-      const a = i * GA + rnd() * 0.4;
-      const lift = -0.15 + rnd() * 0.75;
-      const dir = new THREE.Vector3(Math.cos(a), lift, Math.sin(a)).normalize();
-      grow(sp, dir, 1.5 + RX * 0.12 + rnd() * 0.7, 0.13, 5);
+    // (a) MAIN CROWN — a rounded, organic dome from just below the lowest platform
+    // up to the apex, CAPPING the trunk tip. Boughs grow from the spine toward
+    // shell points (golden-angle, outward-biased, jittered → rounded but not a
+    // perfect ball); short segments fork into leafy twigs.
+    const NC = THREE.MathUtils.clamp(Math.round(span * 3.4 + 22), 28, 240);
+    for (let i = 0; i < NC; i++) {
+      const v = i / Math.max(1, NC - 1); // 0 (base) .. 1 (apex)
+      const ty = cBot + v * (apexY - cBot) + (rnd() - 0.5) * 0.9;
+      // dome radius: widest in the lower-middle, tapering to a rounded apex cap
+      const domeR = cRX * (0.34 + 0.66 * Math.sin(Math.min(1, v * 1.08) * Math.PI));
+      const a = i * GA + rnd() * 0.5;
+      const rr = 0.5 + 0.5 * Math.sqrt(rnd()); // outward bias → rounded shell
+      const target = new THREE.Vector3(Math.cos(a) * domeR * rr, ty, Math.sin(a) * domeR * rr);
+      if (blocked(target, 0.7)) continue; // never into a house/bridge
+      const oy = THREE.MathUtils.clamp(ty - 1.0 - rnd() * 1.0, cBot - 0.5, trunkTopY);
+      const sp = spineAt(oy);
+      const dir = target.clone().sub(sp);
+      if (dir.lengthSq() < 0.01) continue;
+      dir.normalize();
+      grow(sp, dir, 1.5 + rnd() * 0.5, 0.085, 5); // thin, short-segmented, leafy boughs
+    }
+    // (b) per-platform NEST — short boughs hugging each platform so every treehouse
+    // nestles in dense leaves (carved off the deck itself).
+    for (let i = 0; i < active; i++) {
+      const base = nodes[i].base;
+      const tip = nodes[i].tip;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + i * 1.3;
+        const o = base.clone().lerp(tip, 0.55 + rnd() * 0.3);
+        const out = new THREE.Vector3(Math.cos(a), 0.1 + rnd() * 0.5, Math.sin(a)).normalize();
+        grow(o, out, 0.9 + rnd() * 0.5, 0.06, 3); // short nest twigs
+      }
+    }
+    // (c) TIP CAP — a dense leafy knot wrapping the top of the trunk on all sides
+    // so the tip is buried in leaves and never pokes out bare.
+    for (let k = 0; k < 22; k++) {
+      const a = k * GA + 0.3;
+      const o = spineAt(trunkTopY - rnd() * 1.6); // from just below the tip up to it
+      const out = new THREE.Vector3(Math.cos(a), 0.25 + rnd() * 0.7, Math.sin(a)).normalize();
+      grow(o, out, 0.7 + rnd() * 0.7, 0.05, 3);
+    }
+    const tipBase = spineAt(trunkTopY);
+    for (let k = 0; k < 14; k++) {
+      addLeaf(
+        tipBase
+          .clone()
+          .add(new THREE.Vector3((rnd() - 0.5) * 1.1, rnd() * 1.2 - 0.2, (rnd() - 0.5) * 1.1)),
+      );
     }
 
     const branchGeo = branchGeos.length ? mergeGeometries(branchGeos, false) : null;
@@ -837,19 +907,6 @@ export function Tree({
   }, [nodes, active, stargazers]);
 
   useEffect(() => {
-    const trunk = trunkRef.current;
-    if (trunk) {
-      const thick = 1.12 + Math.min(0.75, Math.log2(stars + 1) * 0.12);
-      const height = 0.86 + Math.min(0.32, Math.log2(stars + 1) * 0.05);
-      gsap.to(trunk.scale, {
-        x: thick,
-        y: height,
-        z: thick,
-        duration: 1.1,
-        ease: "power3.out",
-      });
-    }
-
     branchRefs.current.forEach((group, i) => {
       if (!group) return;
       const on = i < active;
@@ -888,8 +945,12 @@ export function Tree({
     });
   });
 
+  // One-time intro pop; the tower's "growth" now reads as the trunk + crown
+  // extending taller and platforms revealing — not a uniform scale (which would
+  // change the fixed ~5m platform spacing).
   const { scale } = useSpring({
-    scale: treeScale(stars),
+    from: { scale: 0.92 },
+    to: { scale: 1 },
     config: { mass: 1, tension: 110, friction: 25 },
   });
 
@@ -897,7 +958,7 @@ export function Tree({
     <animated.group scale={scale} {...props}>
       <primitive object={planter} />
       <group ref={swayRef}>
-        <group ref={trunkRef} scale={[1.12, 0.86, 1.12]}>
+        <group ref={trunkRef}>
           {trunkPieces.map((piece) => (
             <mesh
               key={piece.key}

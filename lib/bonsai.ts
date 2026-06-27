@@ -1,6 +1,14 @@
 import * as THREE from "three";
+import { TIER_SIZE, tierForIndex } from "./rarity";
 
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+// Spiral-tower layout: platforms climb a golden-angle helix up the trunk, spaced
+// so there's always a ~5m clear gap between their edges; the tree grows TALLER as
+// stars arrive (founder lowest, newest on top).
+const HELIX_R = 5.2; // horizontal radius of the platform helix
+const Y0 = 3.6; // height of the first (founder) platform — lifted clear of the ground
+const PITCH = 2.2; // base vertical rise per platform
+const GAP_K = 0.6; // extra rise scaled by the two platforms' radii → keeps the gap ~5m+
 
 export type BonsaiNode = {
   index: number;
@@ -14,45 +22,54 @@ export type BonsaiNode = {
 
 export type BonsaiAnchor = { pos: THREE.Vector3 };
 
-export function trunkCenterAt(u: number): THREE.Vector3 {
-  const t = THREE.MathUtils.clamp(u, 0, 1);
-  const y = THREE.MathUtils.lerp(0.1, 9.35, t);
-  const curl = (1 - t * 0.42) * 0.46;
+/** Trunk centre at an absolute height `y` — a gentle organic lean/wiggle that
+ *  grows slowly so even a very tall trunk curves naturally without drifting the
+ *  helix platforms off the column. Valid for any y (the trunk is now tall). */
+export function spineAt(y: number): THREE.Vector3 {
+  // a clean bonsai S-curve: one low-frequency bend (mainly in X) with amplitude
+  // growing up the height, plus a gentle secondary sway in Z. No high-freq wiggle.
+  const amp = 0.5 + Math.max(0, y) * 0.035;
   return new THREE.Vector3(
-    Math.sin(t * Math.PI * 2.15 + 0.42) * curl + Math.sin(t * 8.1) * 0.08,
+    Math.sin(y * 0.21) * amp,
     y,
-    Math.cos(t * Math.PI * 1.65 + 1.1) * curl * 0.7,
+    Math.sin(y * 0.13 + 0.7) * amp * 0.35,
   );
+}
+
+/** Deck radius a platform at slot `i` will occupy — from its STABLE fallback tier
+ *  (positions must not shift when live stargazer data loads). Matches
+ *  `deckRadius` in rarity.ts (TIER_SIZE * 1.5). */
+function slotDeckRadius(i: number): number {
+  return TIER_SIZE[tierForIndex(i)] * 1.5;
+}
+
+/** Height of the platform at slot `i` (cumulative size-aware pitch up the helix). */
+export function slotHeight(i: number): number {
+  let y = Y0;
+  let prevR = slotDeckRadius(0);
+  for (let k = 1; k <= i; k++) {
+    const r = slotDeckRadius(k);
+    y += PITCH + GAP_K * (prevR + r);
+    prevR = r;
+  }
+  return y;
 }
 
 export function bonsaiNodes(count: number): BonsaiNode[] {
   const out: BonsaiNode[] = [];
-  const max = Math.max(1, count - 1);
-
   for (let i = 0; i < count; i++) {
-    const rank = Math.pow(i / max, 0.58);
-    const heightT = THREE.MathUtils.lerp(0.9, 0.34, rank);
-    const base = trunkCenterAt(heightT);
+    const y = slotHeight(i);
     const angle = i * GOLDEN + 0.72;
     const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-    const tangentTurn = new THREE.Vector3(
-      Math.cos(angle + Math.PI * 0.5),
-      0,
-      Math.sin(angle + Math.PI * 0.5),
-    );
-    const crown = Math.sin(rank * Math.PI);
-    const length = 2.5 + crown * 3.05 + (i % 5) * 0.14;
-    const lift = THREE.MathUtils.lerp(0.62, -0.34, rank) + Math.sin(i * 1.73) * 0.1;
-    const elbow = base
-      .clone()
-      .addScaledVector(radial, length * 0.45)
-      .addScaledVector(tangentTurn, Math.sin(i * 0.91) * 0.34)
-      .add(new THREE.Vector3(0, lift + 0.34, 0));
+    const base = spineAt(y);
     const tip = base
       .clone()
-      .addScaledVector(radial, length)
-      .addScaledVector(tangentTurn, Math.sin(i * 1.37) * 0.5)
-      .add(new THREE.Vector3(0, lift, 0));
+      .addScaledVector(radial, HELIX_R)
+      .add(new THREE.Vector3(0, 0.25, 0));
+    const elbow = base
+      .clone()
+      .addScaledVector(radial, HELIX_R * 0.5)
+      .add(new THREE.Vector3(0, 0.34, 0));
 
     out.push({
       index: i,
@@ -61,10 +78,9 @@ export function bonsaiNodes(count: number): BonsaiNode[] {
       tip,
       angle,
       phase: i * 1.618,
-      radius: THREE.MathUtils.lerp(0.27, 0.095, rank),
+      radius: 0.16,
     });
   }
-
   return out;
 }
 
@@ -117,8 +133,9 @@ export function makeTaperedTubeGeometry(
           Math.sin(a * 3 - u * 2.0 + 1.7) * 0.3 +
           Math.sin(a * 5 + u * 1.3 + 0.5) * 0.16;
         const along = Math.sin(u * 6.0 + barkTwist) * 0.4 + Math.sin(u * 13.0) * 0.2;
-        // root flare near the base (u→0): a few buttress lobes swelling outward.
-        const flare = Math.max(0, 1 - u / 0.12);
+        // root flare near the REAL base (absolute height, so it stays at the foot
+        // of even a very tall trunk): a few buttress lobes swelling outward.
+        const flare = Math.max(0, 1 - center.y / 1.6);
         ridge +=
           irregularity *
           (lobe * 0.13 +

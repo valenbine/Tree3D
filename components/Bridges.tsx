@@ -13,7 +13,6 @@ import type { Stargazer } from "@/lib/stargazers";
 
 const BRIDGE = "/models/suspension_bridge.glb";
 const LANTERN = "/models/stylized_lantern.glb";
-const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const DECK = 0.35; // platform deck top above the raw branch anchor (matches Houses)
@@ -22,10 +21,11 @@ const TRUNK_R = 1.85; // prefer spans that do not cut through the central trunk
 const LADDER_DH = 1.2; // height gap above this → ladder, not a bridge
 const LADDER_W = 0.85;
 const LADDER_CROSS = 0.46; // built ladder's widest extent (for cross-scaling)
-const MAX_BRIDGE_GAP = 8.8;
-const MAX_BRIDGE_DH = 2.6;
-const MAX_LADDER_GAP = 2.8;
-const MAX_LADDER_HD = 7.2;
+const MAX_BRIDGE_GAP = 11; // platforms spiral ~5m apart up the tower
+const MAX_BRIDGE_DH = 2.4; // a BRIDGE only links roughly-level platforms
+const MAX_LADDER_GAP = 7; // a LADDER climbs to a platform clearly ABOVE
+const MAX_LADDER_HD = 11;
+const STEEP_DH = 2.2; // height diff above this → ladder (climb up), else bridge
 
 const WOOD_NOISE = /* glsl */ `
   float whash(vec3 p){ return fract(sin(dot(p, vec3(17.17, 41.93, 9.71))) * 43758.5453); }
@@ -233,14 +233,14 @@ export function Bridges({
       const crossesTrunk = segDistToTrunkXZ(a, b) < TRUNK_R;
       // A real height difference → a LADDER (you climb up); otherwise a walkable
       // suspension BRIDGE. Decks that overlap (gap≈0) need no link.
-      const canLadder =
-        dh > LADDER_DH && dh > gap * 1.25 && gap <= MAX_LADDER_GAP && hd <= MAX_LADDER_HD;
-      const canBridge =
-        gap > 0.35 && gap <= MAX_BRIDGE_GAP && dh <= MAX_BRIDGE_DH && dh / Math.max(gap, 0.5) < 0.72;
+      // A platform clearly ABOVE → a ladder you climb; roughly level → a flat
+      // plank bridge across.
+      const canLadder = dh > STEEP_DH && gap <= MAX_LADDER_GAP && hd <= MAX_LADDER_HD;
+      const canBridge = gap > 0.35 && gap <= MAX_BRIDGE_GAP && dh <= MAX_BRIDGE_DH;
       const valid = (canLadder || canBridge) && !crossesTrunk;
 
       if (!canLadder && !canBridge) {
-        const ladder = dh > LADDER_DH && gap < MAX_LADDER_GAP * 1.25;
+        const ladder = dh > STEEP_DH;
         return { cost: gap + dh * 1.8 + (crossesTrunk ? 7 : 0) + 12, ladder, valid: false, hd };
       }
       return {
@@ -421,7 +421,14 @@ export function Bridges({
       dir.normalize();
       g.position.copy(mid);
       g.position.y += 0.02; // rests just above the deck surface
-      g.quaternion.setFromUnitVectors(X_AXIS, dir);
+      // Orient as a CLEAN STRAIGHT RAMP: length along `dir`, deck width kept
+      // horizontal (no banking/twist — that was the crooked look).
+      axZ.crossVectors(dir, WORLD_UP);
+      if (axZ.lengthSq() < 1e-4) axZ.set(0, 0, 1);
+      axZ.normalize();
+      axX.crossVectors(axZ, dir).normalize();
+      m4.makeBasis(dir, axX, axZ);
+      g.quaternion.setFromRotationMatrix(m4);
       g.scale.set(1, 1, 1); // flat bridge geometry is already built to span length
       void dist;
       if (lg) {

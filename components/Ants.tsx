@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { MAX_HOUSES } from "@/lib/layout";
 import { sampleBranchAnchors } from "@/lib/branches";
+import { trunkBaseRadius, trunkHeight } from "@/lib/growth";
 import { deckRadius } from "@/lib/rarity";
 import type { Stargazer } from "@/lib/stargazers";
 
@@ -145,6 +146,11 @@ export function Ants({
     const d = Math.min(dt, 0.05);
     const t = state.clock.elapsedTime;
     mixers.current.forEach((mixer) => mixer?.update(d));
+    // trunk geometry the climbers ride (matches Tree.tsx): tall, thin, ends inside
+    // the crown.
+    const trunkH = trunkHeight(stars);
+    const trunkBaseR = trunkBaseRadius(stars);
+    const trunkWraps = THREE.MathUtils.clamp(trunkH / 11, 1, 3.5);
 
     for (let i = 0; i < ants.length; i++) {
       const root = refs.current[i];
@@ -221,9 +227,10 @@ export function Ants({
         ant.p += ant.speed * d;
         if (ant.p > 1) ant.p -= 1;
 
-        const y = THREE.MathUtils.lerp(0.4, 7.2, ant.p);
-        const r = THREE.MathUtils.lerp(0.75, 0.32, ant.p);
-        const angle = ant.phase + ant.p * ant.turns * Math.PI * 2;
+        const y = THREE.MathUtils.lerp(0.5, trunkH - 1.5, ant.p);
+        const trunkR = trunkBaseR * Math.pow(1 - THREE.MathUtils.clamp(y / trunkH, 0, 1), 0.72);
+        const r = Math.max(0.2, trunkR) + 0.14; // ride on the bark surface
+        const angle = ant.phase + ant.p * ant.turns * trunkWraps * Math.PI * 2;
 
         root.position.set(
           Math.cos(angle) * r,

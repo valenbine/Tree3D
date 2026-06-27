@@ -71,56 +71,154 @@ export default function SettingsMenu({
   onSky: (s: Sky) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const iconRef = useRef<HTMLSpanElement>(null);
+  const gearIconRef = useRef<HTMLSpanElement>(null);
+  const closeIconRef = useRef<HTMLSpanElement>(null);
+  const buttonSweepRef = useRef<HTMLSpanElement>(null);
   const sweepRef = useRef<HTMLDivElement>(null);
   const season = seasonFromMonth(Math.min(11, Math.max(0, date.month - 1)));
   const seasonColor = SEASON_ACCENT[season];
 
   useEffect(() => {
-    if (iconRef.current) {
-      gsap.to(iconRef.current, {
-        rotate: open ? 135 : 0,
-        scale: open ? 0.92 : 1,
-        duration: 0.45,
-        ease: "back.out(1.8)",
-      });
+    if (gearIconRef.current && closeIconRef.current) {
+      gsap.killTweensOf([gearIconRef.current, closeIconRef.current, buttonSweepRef.current]);
+      if (open) {
+        gsap
+          .timeline()
+          .to(gearIconRef.current, {
+            x: 14,
+            autoAlpha: 0,
+            rotate: 95,
+            duration: 0.24,
+            ease: "power2.in",
+          })
+          .fromTo(
+            closeIconRef.current,
+            { x: -14, autoAlpha: 0, rotate: -70 },
+            {
+              x: 0,
+              autoAlpha: 1,
+              rotate: 0,
+              duration: 0.32,
+              ease: "back.out(1.9)",
+            },
+            "-=0.13",
+          );
+      } else {
+        gsap
+          .timeline()
+          .to(closeIconRef.current, {
+            x: 14,
+            autoAlpha: 0,
+            rotate: 70,
+            duration: 0.2,
+            ease: "power2.in",
+          })
+          .fromTo(
+            gearIconRef.current,
+            { x: -14, autoAlpha: 0, rotate: -95 },
+            {
+              x: 0,
+              autoAlpha: 1,
+              rotate: 0,
+              duration: 0.34,
+              ease: "back.out(1.75)",
+            },
+            "-=0.08",
+          );
+      }
+      if (buttonSweepRef.current) {
+        gsap.fromTo(
+          buttonSweepRef.current,
+          { xPercent: -130, opacity: 0 },
+          { xPercent: 130, opacity: 0.55, duration: 0.48, ease: "power2.out" },
+        );
+      }
     }
-    if (!open || !panelRef.current) return;
-    const items = panelRef.current.querySelectorAll("[data-settings-item]");
-    const tl = gsap.timeline();
-    tl.fromTo(
-      panelRef.current,
-      { autoAlpha: 0, y: -12, scale: 0.965, filter: "blur(12px)" },
-      {
-        autoAlpha: 1,
-        y: 0,
-        scale: 1,
-        filter: "blur(0px)",
-        duration: 0.34,
-        ease: "back.out(1.55)",
-      },
-    ).fromTo(
-      items,
-      { autoAlpha: 0, y: 8 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: 0.28,
-        stagger: 0.035,
-        ease: "power2.out",
-      },
-      "-=0.18",
-    );
-    if (sweepRef.current) {
+    if (!mounted || !panelRef.current) return;
+
+    const panel = panelRef.current;
+    const items = panel.querySelectorAll("[data-settings-item]");
+    gsap.killTweensOf([panel, sweepRef.current, ...Array.from(items)]);
+
+    if (open) {
+      const tl = gsap.timeline();
       tl.fromTo(
-        sweepRef.current,
-        { xPercent: -140, opacity: 0 },
-        { xPercent: 145, opacity: 0.65, duration: 0.9, ease: "power2.out" },
-        0.04,
+        panel,
+        { autoAlpha: 0, y: -10, scale: 0.975, filter: "blur(10px)" },
+        {
+          autoAlpha: 1,
+          y: 0,
+          scale: 1,
+          filter: "blur(0px)",
+          duration: 0.32,
+          ease: "power3.out",
+        },
+      ).fromTo(
+        items,
+        { autoAlpha: 0, y: 7 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.24,
+          stagger: 0.025,
+          ease: "power2.out",
+        },
+        "-=0.16",
       );
+      if (sweepRef.current) {
+        tl.fromTo(
+          sweepRef.current,
+          { xPercent: -140, opacity: 0 },
+          { xPercent: 145, opacity: 0.5, duration: 0.72, ease: "power2.out" },
+          0.04,
+        );
+      }
+      return;
     }
-  }, [open]);
+
+    gsap
+      .timeline({
+        onComplete: () => setMounted(false),
+      })
+      .to(items, {
+        autoAlpha: 0,
+        y: 4,
+        duration: 0.14,
+        stagger: { each: 0.012, from: "end" },
+        ease: "power2.in",
+      })
+      .to(
+        panel,
+        {
+          autoAlpha: 0,
+          y: -8,
+          scale: 0.982,
+          filter: "blur(8px)",
+          duration: 0.2,
+          ease: "power2.inOut",
+        },
+        "-=0.08",
+      );
+  }, [mounted, open]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mounted]);
 
   const num = (
     label: string,
@@ -150,26 +248,35 @@ export default function SettingsMenu({
   );
 
   return (
-    <div className="anim-rise absolute right-5 top-5 text-right">
+    <div ref={rootRef} className="anim-rise absolute right-5 top-5 text-right">
       <button
-        onClick={() => setOpen((o) => !o)}
-        onMouseEnter={() => {
-          if (!iconRef.current || open) return;
-          gsap.to(iconRef.current, { rotate: 28, duration: 0.25, ease: "power2.out" });
-        }}
-        onMouseLeave={() => {
-          if (!iconRef.current || open) return;
-          gsap.to(iconRef.current, { rotate: 0, duration: 0.35, ease: "elastic.out(1,0.55)" });
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+          setMounted(true);
+          setOpen(true);
         }}
         aria-label={open ? "Close" : "Settings"}
-        className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-white/10 bg-white/[0.06] text-white/70 shadow-lg shadow-black/25 backdrop-blur-xl transition hover:border-[#9fd272]/35 hover:bg-white/10 hover:text-white active:scale-95"
+        aria-expanded={open}
+        className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-white/10 bg-white/[0.06] text-white/70 shadow-lg shadow-black/25 backdrop-blur-xl transition hover:border-[#9fd272]/35 hover:bg-white/10 hover:text-white active:scale-95"
       >
-        <span ref={iconRef} className="grid place-items-center">
-          {open ? <CloseIcon className="h-4 w-4" /> : <SettingsIcon className="h-4 w-4" />}
+        <span
+          ref={buttonSweepRef}
+          className="pointer-events-none absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/18 to-transparent opacity-0"
+        />
+        <span className="relative grid h-4 w-4 place-items-center">
+          <span ref={gearIconRef} className="absolute inset-0 grid place-items-center">
+            <SettingsIcon className="h-4 w-4" />
+          </span>
+          <span ref={closeIconRef} className="absolute inset-0 grid place-items-center opacity-0">
+            <CloseIcon className="h-4 w-4" />
+          </span>
         </span>
       </button>
 
-      {open && (
+      {mounted && (
         <div
           ref={panelRef}
           className="relative mt-2 w-[310px] overflow-hidden rounded-2xl border border-white/10 text-left opacity-0 shadow-2xl shadow-black/55 backdrop-blur-2xl ring-1 ring-[#9fd272]/10"

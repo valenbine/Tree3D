@@ -29,6 +29,7 @@ import { Weather } from "./Weather";
 import { SceneRig } from "./SceneRig";
 import { Sky } from "./Sky";
 import { CozyFlyControls } from "./CozyFlyControls";
+import { treeHeight } from "@/lib/growth";
 import type { SceneParams } from "@/lib/weather";
 import type { Stargazer } from "@/lib/stargazers";
 
@@ -72,6 +73,83 @@ function AssetGate() {
   useGLTF(MODEL_ASSETS);
   useTexture("/cloud.png");
   return null;
+}
+
+// Clouds that DRIFT across the sky on the wind and CYCLE smoothly with the
+// weather: bright fluffy banks when clear/cloudy, darkening into a heavy grey
+// storm deck during a thunderstorm (the bright clouds "go away"). Drift wraps far
+// off-screen so it's endless; cover/storm ease so weather changes fade, not snap.
+const CLOUD_DRIFT_RANGE = 150;
+function DriftingClouds({ params }: { params: SceneParams }) {
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  const eased = useRef({ cover: params.cloud, storm: params.storm ? 1 : 0 });
+  const acc = useRef(0);
+  // Throttled "visible" look — re-renders only a few times/sec while a transition
+  // is in flight, then settles (no per-frame React churn).
+  const [look, setLook] = useState(() => ({
+    cover: params.cloud,
+    storm: params.storm ? 1 : 0,
+  }));
+
+  useFrame((_, dt) => {
+    const d = Math.min(dt, 0.05);
+    // (1) endless wind drift — wraps far from the camera so the loop is invisible.
+    const drift = (0.5 + params.wind * 1.0) * d;
+    const half = CLOUD_DRIFT_RANGE / 2;
+    for (const g of refs.current) {
+      if (!g) continue;
+      g.position.x += drift;
+      if (g.position.x > half) g.position.x -= CLOUD_DRIFT_RANGE;
+    }
+    // (2) ease cover/storm toward the live targets so weather cycles smoothly.
+    const e = eased.current;
+    const k = Math.min(1, d * 0.7);
+    e.cover += (params.cloud - e.cover) * k;
+    e.storm += ((params.storm ? 1 : 0) - e.storm) * k;
+    // (3) push to props at ~8 Hz until settled.
+    acc.current += d;
+    if (acc.current >= 0.12) {
+      acc.current = 0;
+      if (Math.abs(e.cover - look.cover) > 0.004 || Math.abs(e.storm - look.storm) > 0.004) {
+        setLook({ cover: e.cover, storm: e.storm });
+      }
+    }
+  });
+
+  // bright (clear) → grey (cloudy) → dark heavy deck (storm). In a storm the bright
+  // clouds are fully replaced by the dark storm colour.
+  const color =
+    "#" +
+    new THREE.Color("#f5f2ec")
+      .lerp(new THREE.Color("#8c98a0"), Math.min(1, look.cover * 1.1))
+      .lerp(new THREE.Color("#39424b"), look.storm)
+      .getHexString();
+  const opacity = THREE.MathUtils.lerp(0.26, 0.82, Math.max(look.cover, look.storm * 0.95));
+  const churn = 0.12 + params.wind * 0.05 + look.storm * 0.28; // storms roil more
+
+  return (
+    <Clouds material={THREE.MeshBasicMaterial} texture="/cloud.png" limit={650}>
+      {CLOUD_LAYOUT.map((c, i) => (
+        <group
+          key={i}
+          ref={(g) => {
+            refs.current[i] = g;
+          }}
+        >
+          <Cloud
+            seed={i + 1}
+            position={c.pos as unknown as [number, number, number]}
+            bounds={c.bounds as unknown as [number, number, number]}
+            volume={c.volume}
+            growth={c.growth}
+            color={color}
+            opacity={opacity}
+            speed={churn}
+          />
+        </group>
+      ))}
+    </Clouds>
+  );
 }
 
 function SceneReadySignal({ onReady }: { onReady?: () => void }) {
@@ -127,12 +205,17 @@ export default function Experience({
   const sunFar = sunDir.multiplyScalar(120);
   // Resolution auto-scales to hold the framerate (PerformanceMonitor below).
   const [dpr, setDpr] = useState(1.5);
+  // Frame the spiral tower: it grows taller with stars, so aim at its mid-height
+  // and let the user pull back far enough to see the whole thing.
+  const worldH = treeHeight(stars) * TREE_BOOST;
+  const targetY = TREE_Y + Math.max(4, worldH * 0.5);
+  const camMax = THREE.MathUtils.clamp(worldH * 1.6 + 26, 40, 340);
 
   return (
     <Canvas
       shadows="soft"
       dpr={dpr}
-      camera={{ position: [26, 18, 26], fov: 42, near: 0.1, far: 200 }}
+      camera={{ position: [26, 18, 26], fov: 42, near: 0.1, far: 600 }}
       gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
         gl.shadowMap.enabled = true;
@@ -184,22 +267,8 @@ export default function Experience({
           </mesh>
         )}
 
-        {/* Layered volumetric clouds: close soft banks plus a wider sky ring. */}
-        <Clouds material={THREE.MeshBasicMaterial} texture="/cloud.png" limit={650}>
-          {CLOUD_LAYOUT.map((c, i) => (
-            <Cloud
-              key={i}
-              seed={i + 1}
-              position={c.pos as unknown as [number, number, number]}
-              bounds={c.bounds as unknown as [number, number, number]}
-              volume={c.volume}
-              growth={c.growth}
-              color={params.cloud > 0.5 ? "#c5ccd0" : "#f2f0e8"}
-              opacity={0.34 + params.cloud * 0.24}
-              speed={0.06 + params.wind * 0.02}
-            />
-          ))}
-        </Clouds>
+        {/* Drifting clouds that cycle with the weather (bright → grey → storm). */}
+        <DriftingClouds params={params} />
         <Dove onFind={onFindDove} />
 
         <Float speed={1.1} rotationIntensity={0.1} floatIntensity={0.5}>
@@ -242,10 +311,10 @@ export default function Experience({
       ) : (
         <OrbitControls
           makeDefault
-          target={[0, 15, 0]}
+          target={[0, targetY, 0]}
           enablePan={false}
           minDistance={12}
-          maxDistance={60}
+          maxDistance={camMax}
           maxPolarAngle={Math.PI / 1.8}
           autoRotate
           autoRotateSpeed={0.35}

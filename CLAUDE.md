@@ -177,6 +177,19 @@ sit on its surface; below it is open sky (it floats). Notes:
 
 ## Tree Growth (design)
 
+> **IMPLEMENTED as a SPIRAL TOWER (2026-06, per owner).** Platforms climb a golden-angle **helix** up
+> the trunk (`bonsaiNodes` in `lib/bonsai.ts`, radius `HELIX_R`, size-aware pitch) with a guaranteed
+> **~5m clear gap** between platform edges. The tree grows **TALLER** as stars arrive — **founder
+> lowest, newest on top** (inverts the "founders at crown" note below, by the owner's choice). Height
+> = `treeHeight(stars)` (`lib/growth.ts`); the trunk is sampled along `spineAt(y)` from 0 to that
+> height and regenerates as it grows (no uniform `treeScale` — that would change the fixed spacing).
+> The recursive crown (`Tree.tsx`) wraps the whole column. The camera (`Experience.tsx`) auto-frames
+> the tower's mid-height; bridges ramp up the spiral (`MAX_BRIDGE_DH` raised). Tune
+> `HELIX_R`/`PITCH`/`GAP_K` in `lib/bonsai.ts`.
+
+The original design below (founders-at-crown, single rounded canopy) is superseded by the spiral
+tower above but kept for the narrative rationale.
+
 The tree is a **family tree**. It starts as a bare sapling and grows **upward** over time; the
 **earliest stargazers are the founders and live at the top (the crown)**, never displaced. Each new
 star extends the tree downward/outward with newer growth, so the silhouette gets taller and fuller
