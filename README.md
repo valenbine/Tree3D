@@ -1,8 +1,20 @@
 # Tree3D
 
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
+[![React Three Fiber](https://img.shields.io/badge/R3F-Three.js-1d4ed8)](https://docs.pmnd.rs/react-three-fiber)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Repo](https://img.shields.io/badge/GitHub-valenbine%2FTree3D-181717?logo=github)](https://github.com/valenbine/Tree3D)
+
 Tree3D is a real-time 3D GitHub portfolio scene built with Next.js and React Three Fiber. It turns the stars of a GitHub repository into a living floating-island village: the tree grows with star count, each stargazer becomes a house, and the atmosphere reacts to live weather data.
 
 The current version focuses on a Chinese-first bilingual experience, interactive stargazer houses, live GitHub data, and a weather-driven scene that can also fall back to a manual demo mode.
+
+## Preview
+
+- Repository: `https://github.com/valenbine/Tree3D`
+- Default tracked repo: `valenbine/Tree3D`
+- Local run: `npm run dev`
+- Recommended deployment target: Vercel
 
 ## Demo Concept
 
