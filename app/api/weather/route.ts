@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GOSSENSASS, skyFromCode } from "@/lib/weather";
+import { SHANGHAI, skyFromCode } from "@/lib/weather";
 
 // Refresh the real Gossensass / Brenner weather every 10 minutes.
 export const revalidate = 600;
@@ -86,14 +86,277 @@ function localDateParts(time: unknown): { year: number; month: number; day: numb
   };
 }
 
-export async function GET() {
+function pickQueryNumber(value: string | null, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function pickQueryString(value: string | null, fallback: string): string {
+  return value?.trim() ? value.trim() : fallback;
+}
+
+function clientIpFromHeaders(headers: Headers): string | null {
+  const forwarded = headers.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  return null;
+}
+
+function normalizeLang(lang: string): "zh" | "en" {
+  return lang.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+
+function uniqueParts(parts: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    const value = part?.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function hasHanCharacters(value: string): boolean {
+  return /[\u3400-\u9fff]/u.test(value);
+}
+
+function normalizeCountryName(country: string | undefined, lang: string): string | undefined {
+  if (!country) return undefined;
+  const value = country.trim();
+  if (lang === "zh" && (value === "中华人民共和国" || value === "中国大陆")) return "中国";
+  return value;
+}
+
+function formatReversePlace(address: Record<string, unknown>, lang: string): string | null {
+  const country = normalizeCountryName(
+    typeof address.country === "string" ? address.country : undefined,
+    lang,
+  );
+  const state = typeof address.state === "string" ? address.state : undefined;
+  const city =
+    typeof address.city === "string"
+      ? address.city
+      : typeof address.town === "string"
+        ? address.town
+        : typeof address.village === "string"
+          ? address.village
+          : typeof address.county === "string"
+            ? address.county
+            : undefined;
+  const district =
+    typeof address.city_district === "string"
+      ? address.city_district
+      : typeof address.suburb === "string"
+        ? address.suburb
+        : typeof address.borough === "string"
+          ? address.borough
+          : typeof address.county === "string"
+            ? address.county
+            : undefined;
+
+  if (lang === "zh") {
+    const zhCountry = country ?? "中国";
+    const zhState = state && state !== city ? state : undefined;
+    const zhCity = city;
+    const zhDistrict = district && district !== zhCity && district !== zhState ? district : undefined;
+    const parts = uniqueParts([zhCountry, zhState, zhCity, zhDistrict]).slice(0, 4);
+    return parts.length ? parts.join("") : null;
+  }
+
+  const parts = uniqueParts([district, city, state, country]).slice(0, 3);
+  return parts.length ? parts.join(", ") : null;
+}
+
+function formatPlaceParts(country: string | undefined, state: string | undefined, city: string | undefined, district: string | undefined, lang: string): string | null {
+  const normalizedCountry = normalizeCountryName(country, lang);
+  if (lang === "zh") {
+    const parts = uniqueParts([
+      normalizedCountry ?? "中国",
+      state && state !== city ? state : undefined,
+      city,
+      district && district !== city && district !== state ? district : undefined,
+    ]).slice(0, 4);
+    return parts.length ? parts.join("") : null;
+  }
+
+  const parts = uniqueParts([district, city, state, normalizedCountry]).slice(0, 3);
+  return parts.length ? parts.join(", ") : null;
+}
+
+async function reversePlaceNameFromBigDataCloud(lat: number, lon: number, lang: string): Promise<string | null> {
+  const normalized = normalizeLang(lang);
   const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${GOSSENSASS.lat}` +
-    `&longitude=${GOSSENSASS.lon}` +
+    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}` +
+    `&longitude=${lon}&localityLanguage=${encodeURIComponent(normalized === "zh" ? "zh" : "en")}`;
+
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "ThreeJS_Portfolio/1.0",
+    },
+    next: { revalidate },
+  });
+
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    city?: string;
+    locality?: string;
+    principalSubdivision?: string;
+    countryName?: string;
+    localityInfo?: {
+      administrative?: Array<{
+        order?: number;
+        name?: string;
+        isoName?: string;
+        description?: string;
+      }>;
+    };
+  };
+
+  const district = data.localityInfo?.administrative
+    ?.filter((item) => typeof item.name === "string" && item.name.trim())
+    .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
+    .find((item) => item.description === "suburb" || item.description === "city_district" || item.description === "county")?.name;
+
+  return formatPlaceParts(
+    typeof data.countryName === "string" ? data.countryName : undefined,
+    typeof data.principalSubdivision === "string" ? data.principalSubdivision : undefined,
+    typeof data.city === "string"
+      ? data.city
+      : typeof data.locality === "string"
+        ? data.locality
+        : undefined,
+    district,
+    normalized,
+  );
+}
+
+async function reversePlaceName(lat: number, lon: number, lang: string): Promise<string | null> {
+  const normalized = normalizeLang(lang);
+  const bigDataCloudPlace = await reversePlaceNameFromBigDataCloud(lat, lon, normalized).catch(() => null);
+  if (bigDataCloudPlace && (normalized !== "zh" || hasHanCharacters(bigDataCloudPlace))) return bigDataCloudPlace;
+
+  const url =
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&addressdetails=1` +
+    `&lat=${lat}&lon=${lon}&accept-language=${encodeURIComponent(normalized === "zh" ? "zh-CN" : "en")}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "ThreeJS_Portfolio/1.0",
+        Accept: "application/json",
+      },
+      next: { revalidate },
+    });
+
+    if (!res.ok) return bigDataCloudPlace;
+    const data = (await res.json()) as { address?: Record<string, unknown>; name?: string; display_name?: string };
+    if (data.address) {
+      const formatted = formatReversePlace(data.address, normalized);
+      if (formatted && (normalized !== "zh" || hasHanCharacters(formatted))) return formatted;
+    }
+    if (typeof data.name === "string" && data.name.trim()) {
+      const trimmed = data.name.trim();
+      if (normalized !== "zh" || hasHanCharacters(trimmed)) return trimmed;
+    }
+    if (typeof data.display_name === "string" && data.display_name.trim()) {
+      const display = data.display_name.split(",").slice(0, 3).join(", ").trim();
+      if (normalized !== "zh" || hasHanCharacters(display)) return display;
+    }
+  } catch {
+    return bigDataCloudPlace;
+  }
+  return bigDataCloudPlace;
+}
+
+type LocationTarget = {
+  lat: number;
+  lon: number;
+  tz: string;
+  place: string;
+};
+
+async function locateByIp(headers: Headers, lang: string): Promise<LocationTarget | null> {
+  const ip = clientIpFromHeaders(headers);
+  if (!ip) return null;
+  const normalized = normalizeLang(lang);
+  const url = `https://ipwho.is/${encodeURIComponent(ip)}?lang=${normalized}`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "ThreeJS_Portfolio/1.0",
+    },
+    next: { revalidate },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    success?: boolean;
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+    region?: string;
+    country?: string;
+    timezone?: { id?: string };
+  };
+  if (!data.success) return null;
+  if (typeof data.latitude !== "number" || typeof data.longitude !== "number") return null;
+  const city = typeof data.city === "string" ? data.city.trim() : "";
+  const region = typeof data.region === "string" ? data.region.trim() : "";
+  const country = typeof data.country === "string" ? data.country.trim() : "";
+  const place =
+    normalized === "zh"
+      ? uniqueParts([country, region, city]).join("")
+      : uniqueParts([city, region, country]).join(", ");
+  const reversePlace = await reversePlaceName(data.latitude, data.longitude, normalized).catch(() => null);
+  return {
+    lat: data.latitude,
+    lon: data.longitude,
+    tz: typeof data.timezone?.id === "string" && data.timezone.id.trim() ? data.timezone.id : SHANGHAI.tz,
+    place: reversePlace || place || SHANGHAI.place,
+  };
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const lang = pickQueryString(searchParams.get("lang"), "en");
+  const manualPlace = searchParams.get("place");
+  const locate = searchParams.get("locate");
+
+  let target: LocationTarget = {
+    lat: pickQueryNumber(searchParams.get("lat"), SHANGHAI.lat),
+    lon: pickQueryNumber(searchParams.get("lon"), SHANGHAI.lon),
+    tz: pickQueryString(searchParams.get("tz"), SHANGHAI.tz),
+    place: pickQueryString(manualPlace, SHANGHAI.place),
+  };
+
+  if (locate === "ip") {
+    try {
+      target = (await locateByIp(request.headers, lang)) ?? target;
+    } catch {
+      target = target;
+    }
+  } else if (!manualPlace) {
+    try {
+      target.place = (await reversePlaceName(target.lat, target.lon, lang)) ?? target.place;
+    } catch {
+      target.place = target.place;
+    }
+  }
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${target.lat}` +
+    `&longitude=${target.lon}` +
     `&current=${CURRENT_FIELDS}` +
     `&hourly=${HOURLY_FIELDS}` +
     `&forecast_days=1` +
-    `&timezone=${encodeURIComponent(GOSSENSASS.tz)}`;
+    `&timezone=${encodeURIComponent(target.tz)}`;
 
   try {
     const res = await fetch(url, { next: { revalidate } });
@@ -106,7 +369,7 @@ export async function GET() {
 
     return NextResponse.json({
       live: true,
-      place: GOSSENSASS.place,
+      place: target.place,
       tempC: num(c.temperature_2m, 12),
       apparentTempC: num(c.apparent_temperature, num(c.temperature_2m, 12)),
       humidity: num(c.relative_humidity_2m, 55),
@@ -134,7 +397,7 @@ export async function GET() {
     // Fallback so the scene still has sensible mountain weather offline.
     return NextResponse.json({
       live: false,
-      place: GOSSENSASS.place,
+      place: target.place,
       tempC: 14,
       apparentTempC: 14,
       humidity: 62,

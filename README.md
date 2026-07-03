@@ -1,98 +1,132 @@
-# GitHub Star Tree
+# Tree3D
 
-A living 3D portfolio scene where a GitHub repository grows into a small treehouse village. The tracked repo's stars drive the tree, every stargazer becomes a house, and the world reacts to live mountain weather from Gossensaß / Colle Isarco in South Tyrol.
+Tree3D is a real-time 3D GitHub portfolio scene built with Next.js and React Three Fiber. It turns the stars of a GitHub repository into a living floating-island village: the tree grows with star count, each stargazer becomes a house, and the atmosphere reacts to live weather data.
 
-Built as a polished real-time WebGL experience with Next.js, React Three Fiber, shader-driven weather, animated UI, and deterministic GitHub data mapping.
+The current version focuses on a Chinese-first bilingual experience, interactive stargazer houses, live GitHub data, and a weather-driven scene that can also fall back to a manual demo mode.
 
-## Overview
+## Demo Concept
 
-GitHub Star Tree turns repository activity into a calm, explorable 3D scene:
+Tree3D visualizes a repository as an explorable 3D world:
 
-- Stars grow the tree and determine how dense the village becomes.
-- Stargazers are rendered as houses placed deterministically around the tree.
-- House rarity is based on GitHub profile clout plus contributor status.
-- The scene mirrors live weather from Gossensaß / Gemeinde Brenner.
-- Night mode adds stars and a procedural moon phase.
-- Users can orbit, zoom, pan, fly around, search houses, inspect profiles, and override weather for demos.
+- Total stars determine how large the tree and village become.
+- Every stargazer is mapped to a house in the tree village.
+- Each house gets a rarity tier based on GitHub profile signals and contributor status.
+- Clicking a house opens a GitHub profile panel with richer user details.
+- The scene reacts to live weather and time-of-day data.
+- Chinese and English UI are both supported, with Chinese as the default experience.
 
-## Highlights
+## Core Features
 
-### Living GitHub Village
+### 1. GitHub Star Village
 
-- Live stargazer count from a single configured repository.
-- Deterministic layout, so houses do not reshuffle on reload.
-- Per-stargazer rarity tiers using profile signals and contributor bonus.
-- Profile panel with GitHub information and repository context.
-- Search and highlight flow for quickly finding a house.
+- Live star and stargazer data from a configured GitHub repository
+- Stable house placement so reloads do not reshuffle the village
+- Search bar for quickly locating a stargazer house
+- Clickable houses that open a profile detail panel
+- Contributor-aware rarity scoring
 
-### Real-Time Weather
+### 2. Weather-Driven Scene
 
-The environment follows Open-Meteo data for Gossensaß / Colle Isarco:
+- Weather data powered by Open-Meteo
+- Dynamic sky, fog, wind, clouds, rain, snow, and seasonal color changes
+- Default weather location set to Shanghai
+- Browser geolocation and IP fallback for more relevant local weather display
+- Chinese weather place names in Chinese UI mode
 
-- Temperature, humidity, pressure, visibility.
-- Rain, snow, fog, storm state.
-- Wind speed, gusts, and wind direction.
-- Low, mid, and high cloud cover.
-- Day/night lighting based on local time.
-- Seasonal foliage and snow accumulation.
+### 3. Interactive 3D Experience
 
-Weather affects lighting, fog, volumetric clouds, grass, leaves, branch sway, precipitation drift, and the overall scene mood.
+- Orbit view and fly mode
+- Animated loading overlay and polished UI transitions
+- Volumetric clouds, procedural night sky, and weather particles
+- Adaptive quality behavior for smoother performance on weaker devices
 
-### Night Sky
+### 4. Bilingual Interface
 
-- GPU-friendly star field with subtle color variation and twinkle.
-- Procedural moon with calculated phase, illumination, halo, and crater detail.
-- Stars and moon visibility are suppressed by daylight, cloud cover, fog, and rain.
-- No moon texture is required.
+- Chinese-first UI out of the box
+- `中 / EN` language switch in the page header
+- Project-owned UI strings localized centrally
+- External GitHub content kept in its original language
 
-### Performance-Focused 3D
+## How Rarity Works
 
-- React Three Fiber and Drei scene composition.
-- Adaptive DPR and cloud quality based on frame budget.
-- Shader-driven volumetric clouds.
-- Instanced or batched effects where practical.
-- Reduced-quality path while camera/fly controls are moving.
-- Pointer-lock fly controls for smooth movement.
+Rarity is computed in `lib/rarity.ts`.
+
+The score mainly depends on:
+
+- GitHub followers
+- Public repository count
+- Account age
+- Whether the stargazer is also a contributor to the tracked repository
+- Commit count for contributors
+
+Current tiers:
+
+- `common`
+- `uncommon`
+- `rare`
+- `legendary`
+
+If GitHub enrichment data is unavailable, the client falls back to a deterministic weighted tier based on stargazer index so the scene still renders consistently.
 
 ## Tech Stack
 
 | Area | Technology |
 | --- | --- |
-| Framework | Next.js App Router |
+| Framework | Next.js 16 App Router |
 | Language | TypeScript |
 | UI | React, Tailwind CSS |
 | 3D | Three.js, React Three Fiber, Drei |
-| Animation | GSAP, React frame loops |
+| Animation | GSAP, frame-loop animation |
 | Data | GitHub REST API, Open-Meteo |
-| Deployment target | Vercel |
+| Deployment | Vercel |
 
 ## Project Structure
 
 ```text
 app/
-  page.tsx                    Main client experience shell
+  page.tsx                    Main client page and UI state
   api/
-    stargazers/route.ts       GitHub star + stargazer data
-    weather/route.ts          Live Open-Meteo weather
-    gh-user/route.ts          Profile panel data
+    stargazers/route.ts       GitHub star and stargazer aggregation
+    gh-user/route.ts          GitHub profile detail API
+    user-repos/route.ts       Repository list for profile panel
+    weather/route.ts          Weather and reverse geocoding API
 
 components/
-  Experience.tsx              Main R3F canvas scene
-  Tree.tsx                    Tree, growth, foliage and wind response
-  Houses.tsx                  Stargazer houses and interactions
-  NightSky.tsx                Stars and procedural moon
-  Weather.tsx                 Rain, snow and storm particles
-  SettingsMenu.tsx            Live/manual weather and quality controls
-  LoadingOverlay.tsx          Animated loading experience
+  Experience.tsx              Main React Three Fiber scene
+  Tree.tsx                    Tree growth and canopy system
+  Houses.tsx                  Stargazer houses and selection
+  HouseInterior.tsx           Profile details modal
+  SearchBar.tsx               Stargazer search UI
+  SettingsMenu.tsx            Weather, quality, and debug controls
+  LoadingOverlay.tsx          Intro loading screen
 
 lib/
-  weather.ts                  Weather mapping, moon phase and scene params
-  rarity.ts                   Rarity scoring
-  stargazers.ts               Stargazer types and naming helpers
-  growth.ts                   Star count to tree growth mapping
+  rarity.ts                   Rarity scoring and tier resolution
+  weather.ts                  Weather normalization and scene params
+  weather-location.js         Weather location mode state helpers
+  i18n.ts                     Centralized bilingual UI copy
+  stargazers.ts               Stargazer data types and naming helpers
 ```
 
-## Getting Started
+## Environment Variables
+
+Copy the example file first:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Available variables:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GITHUB_REPO` | No | Repository to visualize. Defaults to `Plattnericus/ThreeJS_Portfolio`. |
+| `GITHUB_TOKEN` | Recommended | GitHub token used server-side for higher API rate limits. |
+| `DEMO_STARS` | No | Fallback star count when GitHub data is unavailable. |
+| `NEXT_PUBLIC_DEV_CONTROLS` | No | Enables local development-only star editing controls. |
+| `CRON_SECRET` | No | Reserved for protected background refresh flows if enabled later. |
+
+## Local Development
 
 ### 1. Install dependencies
 
@@ -102,110 +136,100 @@ npm install
 
 ### 2. Configure environment
 
-Copy the example environment file:
-
 ```bash
 cp .env.local.example .env.local
 ```
 
-Recommended variables:
+Then edit `.env.local` with the repository and token you want to use.
 
-| Variable | Required | Description |
-| --- | --- | --- |
-| `GITHUB_REPO` | No | Repository to visualize. Defaults to `Plattnericus/ThreeJS_Portfolio`. |
-| `GITHUB_TOKEN` | No | Server-side GitHub token for higher rate limits. |
-| `DEMO_STARS` | No | Fallback star count if GitHub is unavailable. |
-| `NEXT_PUBLIC_DEV_CONTROLS` | No | Enables local star +/- controls for development. |
-
-### 3. Run locally
+### 3. Start the development server
 
 ```bash
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000`.
 
-```text
-http://localhost:3000
-```
-
-### 4. Build
+### 4. Production build check
 
 ```bash
 npm run build
 ```
 
-## Data Flow
+## Deployment Guide
+
+Tree3D is designed to deploy cleanly on Vercel.
+
+### Deploy with Vercel
+
+1. Push the repository to GitHub.
+2. Import the repository into Vercel.
+3. Set the project framework to Next.js if Vercel does not detect it automatically.
+4. Add the required environment variables in the Vercel dashboard.
+5. Trigger the first deployment.
+
+Recommended Vercel environment variables:
 
 ```text
-GitHub API
-  -> /api/stargazers
-  -> scored stargazer payload
-  -> 3D tree, houses, HUD
-
-Open-Meteo
-  -> /api/weather
-  -> normalized SceneParams
-  -> sky, fog, clouds, wind, particles, moon, stars
+GITHUB_REPO=your-account/your-target-repo
+GITHUB_TOKEN=your-github-token
+DEMO_STARS=8
 ```
 
-The browser receives render-ready data. Secrets remain server-side.
+### Post-Deploy Checks
 
-## Weather Model
+After deployment, verify:
 
-The scene uses realistic mapping rather than fixed visual presets:
+- The homepage loads the 3D scene successfully.
+- `/api/stargazers` returns live repository data.
+- `/api/weather` returns weather payloads correctly.
+- Language toggle works.
+- Search selects and opens the correct house.
 
-- Cloud layers drive volumetric coverage and sun dimming.
-- Visibility and humidity affect fog density.
-- Wind direction is converted from meteorological "from" bearing into scene-space downwind motion.
-- Gusts add short turbulence to foliage, clouds and particles.
-- Moon phase is computed from the selected/live date using a synodic month cycle.
-- Stars and moon fade out under daylight, heavy cloud, fog or rain.
+## User Flow
 
-Manual mode uses the same data shape as live mode, so testing a night, storm or snow scene exercises the real rendering path.
+1. Open the site and wait for the scene to load.
+2. Browse the floating island village.
+3. Use the search bar to find a stargazer.
+4. Click a house to open that stargazer's profile panel.
+5. Use the settings menu to inspect weather, quality, and live/manual scene behavior.
 
-## Assets
+## Data Sources
 
-Runtime models live in:
+### GitHub
 
-```text
-public/models/
-```
+- Repository stars and stargazers
+- User profile data
+- Public repository metadata
+- Contributor commit counts when available
 
-Credits and licenses are tracked in:
+### Open-Meteo
 
-```text
-CREDITS.md
-```
-
-When adding or replacing GLB assets, keep files optimized and register them consistently with the existing model pipeline.
-
-## Deployment
-
-The app is designed for Vercel:
-
-- Next.js App Router routes run server-side.
-- GitHub star data refreshes on page load and every five minutes while the app is open.
-- Open-Meteo weather data is cached by the weather route.
-- `GITHUB_TOKEN` should be configured as a Vercel environment variable for higher GitHub API limits.
+- Temperature
+- Cloud cover
+- Wind speed and gusts
+- Visibility
+- Rain and snowfall
+- Day and night timing
 
 ## Performance Notes
 
-The scene targets a smooth laptop experience:
+- Quality adapts based on device capability and runtime conditions.
+- Cloud quality is reduced while the camera is moving.
+- Scene effects try to stay GPU-friendly for laptop-class devices.
+- Fly mode is supported for free exploration without changing the core data model.
 
-- Adaptive resolution scaling.
-- Lower volumetric cloud cost while moving.
-- Quality presets for grass density and cloud detail.
-- Single draw-call star field.
-- Procedural moon shader instead of texture downloads.
-- Controlled particle counts for rain, snow and ambient effects.
+## Known Limitations
 
-## Current Limitations
+- The tree asset is still a stylized static model, so true organic growth would require morph targets or a rigged asset.
+- GitHub enrichment is intentionally capped to avoid aggressive API usage.
+- `npm run lint` still points to the legacy `next lint` flow and needs a separate migration for Next.js 16.
+- Location accuracy depends on browser geolocation availability and the external reverse geocoding provider.
 
-- The main tree asset is stylized and static; true organic growth requires a morph-target or rigged GLB.
-- GitHub contributor enrichment is intentionally capped to protect API rate limits.
-- The existing `npm run lint` script uses the legacy `next lint` command and should be migrated if linting is required on Next.js 16.
+## Credits
+
+3D model and asset credits are tracked in `CREDITS.md`.
 
 ## License
 
-This repository is a personal portfolio project. Check individual model licenses in `CREDITS.md` before reusing assets.
+This repository is a portfolio-style project. Review `CREDITS.md` before reusing bundled assets or models.

@@ -11,6 +11,13 @@ export const GOSSENSASS = {
   place: "Gossensass / Colle Isarco, Gemeinde Brenner",
 };
 
+export const SHANGHAI = {
+  lat: 31.2304,
+  lon: 121.4737,
+  tz: "Asia/Shanghai",
+  place: "中国上海市",
+};
+
 export type Precip = "none" | "rain" | "snow";
 export type Sky = "clear" | "clouds" | "fog" | "rain" | "snow" | "storm";
 
@@ -351,7 +358,7 @@ export function manualWeather(hour: number, month: number, sky: Sky, year?: numb
   const cloudMid = sky === "clear" ? 0.08 : sky === "clouds" ? 0.7 : 0.86;
   const cloudHigh = sky === "clear" ? 0.15 : sky === "storm" ? 0.7 : 0.55;
   return {
-    place: GOSSENSASS.place,
+    place: SHANGHAI.place,
     tempC,
     apparentTempC: tempC,
     humidity: sky === "fog" ? 97 : sky === "clear" ? 45 : 72,
@@ -379,7 +386,7 @@ export function manualWeather(hour: number, month: number, sky: Sky, year?: numb
 
 export function weatherFromApiPayload(payload: Record<string, unknown>): Weather {
   return {
-    place: typeof payload.place === "string" ? payload.place : GOSSENSASS.place,
+    place: typeof payload.place === "string" ? payload.place : SHANGHAI.place,
     tempC: finite(payload.tempC as number | undefined, 12),
     apparentTempC: finite(payload.apparentTempC as number | undefined, 12),
     humidity: finite(payload.humidity as number | undefined, 55),

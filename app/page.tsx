@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import Hud from "@/components/Hud";
 import SettingsMenu, {
   type GraphicsQuality,
   type ManualDate,
@@ -13,11 +12,11 @@ import HouseInterior from "@/components/HouseInterior";
 import MemorialSecret from "@/components/MemorialSecret";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import { FlyIcon } from "@/components/Icons";
+import { UI_TEXT, type Language } from "@/lib/i18n";
 import { nameForHouse, type Stargazer } from "@/lib/stargazers";
 import { resolveTier } from "@/lib/rarity";
+import { resolveWeatherMode, shouldRequestGeolocation } from "@/lib/weather-location";
 
-// Toggle the in-scene star editor via env (NEXT_PUBLIC_DEV_CONTROLS=true).
-const DEV_CONTROLS = process.env.NEXT_PUBLIC_DEV_CONTROLS === "true";
 import {
   manualWeather,
   sceneFromWeather,
@@ -32,8 +31,52 @@ const Experience = dynamic(() => import("@/components/Experience"), {
 });
 
 const STARGAZER_REFRESH_MS = 5 * 60 * 1000;
+const WEATHER_REFRESH_MS = 10 * 60 * 1000;
 const LOADER_INTRO_MS = 900;
 const GRAPHICS_STORAGE_KEY = "star-tree-graphics-quality";
+const LANGUAGE_STORAGE_KEY = "star-tree-language";
+
+type ClientCoords = {
+  lat: number;
+  lon: number;
+  tz: string;
+};
+
+function weatherQuery(
+  mode: "default" | "ip" | "coords",
+  coords: ClientCoords | null,
+  language: Language,
+): string {
+  if (mode === "coords" && coords) {
+    return new URLSearchParams({
+      lat: String(coords.lat),
+      lon: String(coords.lon),
+      tz: coords.tz,
+      lang: language,
+    }).toString();
+  }
+
+  if (mode === "ip") {
+    return new URLSearchParams({ locate: "ip", lang: language }).toString();
+  }
+
+  if (!coords) {
+    return new URLSearchParams({
+      lat: "31.2304",
+      lon: "121.4737",
+      tz: "Asia/Shanghai",
+      place: language === "zh" ? "中国上海市" : "Shanghai, China",
+      lang: language,
+    }).toString();
+  }
+
+  return new URLSearchParams({
+    lat: String(coords.lat),
+    lon: String(coords.lon),
+    tz: coords.tz,
+    lang: language,
+  }).toString();
+}
 
 function isGraphicsQuality(value: string | null): value is GraphicsQuality {
   return value === "auto" || value === "low" || value === "medium" || value === "high";
@@ -80,6 +123,10 @@ export default function Home() {
   const [graphicsQuality, setGraphicsQuality] = useState<GraphicsQuality>("auto");
   const [resolvedGraphicsQuality, setResolvedGraphicsQuality] =
     useState<ResolvedGraphicsQuality>("medium");
+  const [language, setLanguage] = useState<Language>("zh");
+  const [weatherMode, setWeatherMode] = useState<"default" | "ip" | "coords">("default");
+  const [clientCoords, setClientCoords] = useState<ClientCoords | null>(null);
+  const [geoStatus, setGeoStatus] = useState<"idle" | "pending" | "succeeded" | "failed">("idle");
   const now = new Date();
   const [date, setDate] = useState<ManualDate>({
     year: now.getFullYear(),
@@ -96,6 +143,8 @@ export default function Home() {
   useEffect(() => {
     const saved = window.localStorage.getItem(GRAPHICS_STORAGE_KEY);
     if (isGraphicsQuality(saved)) setGraphicsQuality(saved);
+    const savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (savedLanguage === "zh" || savedLanguage === "en") setLanguage(savedLanguage);
   }, []);
 
   useEffect(() => {
@@ -105,11 +154,54 @@ export default function Home() {
     );
   }, [graphicsQuality]);
 
+  useEffect(() => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  }, [language]);
+
   const initialDataReady = starsReady && weatherReady;
 
   useEffect(() => {
     if (loaderIntroDone && initialDataReady) setMountScene(true);
   }, [initialDataReady, loaderIntroDone]);
+
+  useEffect(() => {
+    const nextMode = resolveWeatherMode({
+      sceneReady,
+      geoStatus,
+      hasGeolocation: typeof navigator !== "undefined" && Boolean(navigator.geolocation),
+      clientCoords,
+    });
+    setWeatherMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [clientCoords, geoStatus, sceneReady]);
+
+  useEffect(() => {
+    if (
+      !shouldRequestGeolocation({
+        sceneReady,
+        geoStatus,
+        hasGeolocation: typeof navigator !== "undefined" && Boolean(navigator.geolocation),
+        clientCoords,
+      }) ||
+      typeof navigator === "undefined" ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+    setGeoStatus("pending");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+        setClientCoords({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+          tz,
+        });
+        setGeoStatus("succeeded");
+      },
+      () => setGeoStatus("failed"),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60 * 1000 },
+    );
+  }, [clientCoords, geoStatus, sceneReady]);
 
   useEffect(() => {
     // Refresh stargazers every 5 minutes so new stars grow the tree live.
@@ -130,8 +222,8 @@ export default function Home() {
           setStarsReady(true);
         });
 
-    const loadWeather = () =>
-      fetch("/api/weather")
+    const loadWeather = (query: string) =>
+      fetch(`/api/weather?${query}`)
         .then((r) => r.json())
         .then((d) => {
           setLiveWeather(weatherFromApiPayload(d));
@@ -143,15 +235,19 @@ export default function Home() {
         });
 
     loadStars();
-    loadWeather();
+    loadWeather(weatherQuery(weatherMode, clientCoords, language));
     // Refresh the live village every 5 minutes while the site is open.
     const starId = setInterval(loadStars, STARGAZER_REFRESH_MS);
-    const weatherId = setInterval(loadWeather, 10 * 60 * 1000);
+    const weatherId = setInterval(
+      () => loadWeather(weatherQuery(weatherMode, clientCoords, language)),
+      // Keep the same source mode during refreshes.
+      WEATHER_REFRESH_MS,
+    );
     return () => {
       clearInterval(starId);
       clearInterval(weatherId);
     };
-  }, []);
+  }, [clientCoords, language, weatherMode]);
 
   const weather: Weather | null =
     mode === "manual"
@@ -202,6 +298,7 @@ export default function Home() {
   }, [searchActive, searchResults]);
 
   const highlight = searchActive;
+  const copy = UI_TEXT[language];
 
   return (
     <main className="relative h-full w-full overflow-hidden">
@@ -229,6 +326,7 @@ export default function Home() {
         dataReady={initialDataReady}
         starsReady={starsReady}
         weatherReady={weatherReady}
+        language={language}
       />
       {secretOpen && <MemorialSecret onClose={() => setSecretOpen(false)} />}
 
@@ -242,6 +340,7 @@ export default function Home() {
           onQuery={setSearch}
           results={searchResults}
           activeIndex={highlight}
+          language={language}
           onActive={setSearchActive}
           onSelect={(result) => {
             setSearch(result.name);
@@ -249,6 +348,28 @@ export default function Home() {
             setSelected(result.index);
           }}
         />
+
+        <div className="anim-rise-x absolute right-16 top-5 z-40 flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-1 py-1 text-[11px] font-semibold text-white/75 backdrop-blur-xl">
+          <span className="px-2 text-white/38">{copy.page.languageLabel}</span>
+          {(["zh", "en"] as const).map((lang) => {
+            const active = language === lang;
+            return (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setLanguage(lang)}
+                className={`rounded-full px-2.5 py-1 transition ${
+                  active
+                    ? "bg-[#9fd272] text-[#0a100d]"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
+                aria-pressed={active}
+              >
+                {lang === "zh" ? "中" : "EN"}
+              </button>
+            );
+          })}
+        </div>
 
         <button
           onClick={() => setFly((f) => !f)}
@@ -259,11 +380,11 @@ export default function Home() {
           }`}
         >
           <FlyIcon className="h-3.5 w-3.5" />
-          {fly ? "Exit fly mode" : "Fly around"}
+          {fly ? copy.page.exitFlyMode : copy.page.flyAround}
         </button>
         {fly && (
           <div className="pointer-events-none absolute bottom-32 left-1/2 -translate-x-1/2 text-center text-[11px] text-white/45 sm:bottom-16">
-            Click scene to lock look · WASD / arrows move · R / F up &amp; down · Esc releases
+            {copy.page.flyHint}
           </div>
         )}
 
@@ -272,14 +393,11 @@ export default function Home() {
             index={selected}
             stargazer={stargazers?.[selected] ?? null}
             onClose={() => setSelected(null)}
+            language={language}
           />
         )}
-        <Hud
-          stars={stars}
-          devControls={DEV_CONTROLS}
-          onChange={(n) => setStars(Math.max(0, n))}
-        />
         <SettingsMenu
+          language={language}
           weather={weather}
           mode={mode}
           date={date}

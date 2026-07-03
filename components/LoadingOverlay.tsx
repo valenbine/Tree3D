@@ -3,6 +3,7 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import gsap from "gsap";
+import { UI_TEXT, type Language } from "@/lib/i18n";
 
 const MIN_VISIBLE_MS = 900;
 const INSTANT_CACHE_GRACE_MS = 1800;
@@ -90,13 +91,16 @@ export default function LoadingOverlay({
   dataReady,
   starsReady,
   weatherReady,
+  language,
 }: {
   sceneReady: boolean;
   dataReady: boolean;
   starsReady: boolean;
   weatherReady: boolean;
+  language: Language;
 }) {
   const { progress, active, loaded, total, item } = useProgress();
+  const copy = UI_TEXT[language].loader;
   const [hidden, setHidden] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [settled, setSettled] = useState(false);
@@ -189,26 +193,26 @@ export default function LoadingOverlay({
   const loadedAssets = total > 0 ? Math.min(loaded, total) : 0;
   const assetCount = total > 0 ? ` (${loadedAssets} / ${total})` : "";
   const phase = (() => {
-    if (!starsReady) return "Loading stargazers";
-    if (!weatherReady) return "Loading weather";
-    if (displayProgress < 52) return "Loading assets";
-    if (displayProgress < 76) return "Preparing models";
-    if (displayProgress < 92) return "Building scene";
-    if (displayProgress < 96) return "Starting renderer";
-    return "Opening scene";
+    if (!starsReady) return copy.loadingStargazers;
+    if (!weatherReady) return copy.loadingWeather;
+    if (displayProgress < 52) return copy.loadingAssets;
+    if (displayProgress < 76) return copy.preparingModels;
+    if (displayProgress < 92) return copy.buildingScene;
+    if (displayProgress < 96) return copy.startingRenderer;
+    return copy.openingScene;
   })();
   const status = `${phase}${assetCount}`;
   const itemName = item?.split("/").pop()?.replace(/\?.*$/, "");
   const detail =
     total > 0
       ? itemName
-        ? `Asset ${loadedAssets} of ${total}: ${itemName}`
-        : `Assets ${loadedAssets} of ${total}`
+        ? copy.assetDetail(loadedAssets, total, itemName)
+        : copy.assetsDetail(loadedAssets, total)
       : !starsReady
-        ? "Fetching the live village"
+        ? copy.fetchingVillage
         : !weatherReady
-          ? "Fetching mountain weather"
-          : "Preparing the renderer";
+          ? copy.fetchingWeather
+          : copy.preparingRenderer;
 
   // Strokes draw outward, then leaves bloom at the tips.
   const { branches, leaves } = TREE;
@@ -222,7 +226,7 @@ export default function LoadingOverlay({
     >
       <div className="loader-glow" />
 
-      <div className="loader-stage" aria-label="Loading Star Tree">
+      <div className="loader-stage" aria-label={copy.ariaLabel}>
         <div className="loader-mark">
           <svg viewBox="0 0 200 210" className="loader-svg" aria-hidden="true">
             <defs>
@@ -262,8 +266,8 @@ export default function LoadingOverlay({
           </svg>
         </div>
 
-        <div className="loader-copy">
-          <div className="loader-title">Star Tree</div>
+          <div className="loader-copy">
+          <div className="loader-title">{copy.title}</div>
           <div className="loader-status" key={phase}>
             <span>{status}</span>
             <span className="loader-dots" aria-hidden="true">

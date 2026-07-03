@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import gsap from "gsap";
+import {
+  GRAPHICS_LABELS,
+  SEASON_LABELS,
+  SKY_LABELS,
+  UI_TEXT,
+  type Language,
+} from "@/lib/i18n";
 import { seasonFromMonth, type Sky, type Weather } from "@/lib/weather";
 import {
   CalendarIcon,
@@ -57,8 +64,16 @@ export type GraphicsQuality = "auto" | "low" | "medium" | "high";
 type ResolvedGraphicsQuality = Exclude<GraphicsQuality, "auto">;
 
 // Compact relative phrasing for the refresh status.
-function relTime(ms: number): string {
+function relTime(ms: number, language: Language): string {
   const s = Math.max(0, Math.round(ms / 1000));
+  if (language === "zh") {
+    if (s < 5) return "刚刚";
+    if (s < 60) return `${s} 秒前`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m} 分钟前`;
+    const h = Math.floor(m / 60);
+    return `${h} 小时前`;
+  }
   if (s < 5) return "just now";
   if (s < 60) return `${s}s ago`;
   const m = Math.floor(s / 60);
@@ -88,6 +103,7 @@ function isTextInputTarget(target: EventTarget | null): boolean {
 }
 
 export default function SettingsMenu({
+  language,
   weather,
   mode,
   date,
@@ -102,6 +118,7 @@ export default function SettingsMenu({
   onSky,
   onGraphicsQuality,
 }: {
+  language: Language;
   weather: Weather | null;
   mode: "live" | "manual";
   date: ManualDate;
@@ -127,6 +144,7 @@ export default function SettingsMenu({
   const sweepRef = useRef<HTMLDivElement>(null);
   const season = seasonFromMonth(Math.min(11, Math.max(0, date.month - 1)));
   const seasonColor = SEASON_ACCENT[season];
+  const copy = UI_TEXT[language].settings;
   const nextMs = nextSync ? Math.max(0, nextSync - Date.now()) : null;
   const syncWindow = lastSync && nextSync ? Math.max(1, nextSync - lastSync) : 1;
   const syncProgress =
@@ -282,7 +300,7 @@ export default function SettingsMenu({
   );
 
   return (
-    <div ref={rootRef} className="anim-slide-right absolute right-5 top-5 text-right">
+    <div ref={rootRef} className="anim-slide-right absolute right-5 top-5 z-40 text-right">
       {/* Transform-only idle motion for the settings trigger. */}
       <span className={`gear-float inline-block ${open ? "gear-float--rest" : ""}`}>
         <button
@@ -294,7 +312,7 @@ export default function SettingsMenu({
             setMounted(true);
             setOpen(true);
           }}
-          aria-label={open ? "Close" : "Settings"}
+          aria-label={open ? copy.close : copy.open}
           aria-expanded={open}
           className="settings-gear-btn relative grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-white/10 bg-white/[0.06] text-white/70 shadow-lg shadow-black/25 backdrop-blur-xl transition hover:border-[#9fd272]/40 hover:bg-white/10 hover:text-white active:scale-90"
         >
@@ -319,7 +337,7 @@ export default function SettingsMenu({
       {mounted && (
         <div
           ref={panelRef}
-          className="relative mt-2 w-[340px] overflow-hidden rounded-2xl border border-white/10 text-left opacity-0 shadow-2xl shadow-black/55 backdrop-blur-2xl ring-1 ring-[#9fd272]/10"
+          className="relative z-40 mt-2 w-[340px] overflow-hidden rounded-2xl border border-white/10 text-left opacity-0 shadow-2xl shadow-black/55 backdrop-blur-2xl ring-1 ring-[#9fd272]/10"
         >
           <div
             ref={sweepRef}
@@ -335,19 +353,27 @@ export default function SettingsMenu({
                     style={{ background: mode === "live" ? "#7ec85a" : "#6b7280" }}
                   />
                   <span className="text-[13px] font-semibold tracking-tight text-white/95">
-                    Gossensass, Brenner
+                    {weather?.place ?? "--"}
                   </span>
                 </div>
                 <div className="mt-1 text-[11px] text-white/48">
                   {weather
-                    ? `${Math.round(weather.tempC)}°C · ${weather.sky} · ${Math.round(weather.humidity)}% RH`
-                    : "loading"}
+                    ? copy.weatherSummary(
+                        weather.tempC,
+                        SKY_LABELS[language][weather.sky],
+                        weather.humidity,
+                      )
+                    : copy.loading}
                 </div>
               </div>
               <div className="flex max-w-[142px] items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.065] px-2 py-1 text-[11px] font-semibold leading-tight text-white/66">
                 <WindIcon className="h-3.5 w-3.5 text-[#9fd272]" />
                 {weather
-                  ? `${Math.round(weather.windKmh)} km/h ${cardinal(weather.windDeg)} · ${Math.round(weather.gustKmh)} gust`
+                  ? copy.windSummary(
+                      weather.windKmh,
+                      cardinal(weather.windDeg),
+                      weather.gustKmh,
+                    )
                   : "--"}
               </div>
             </div>
@@ -365,7 +391,7 @@ export default function SettingsMenu({
                       : "text-white/55 hover:text-white"
                   }`}
                 >
-                  {m}
+                  {m === "live" ? copy.live : copy.manual}
                 </button>
               ))}
             </div>
@@ -373,12 +399,12 @@ export default function SettingsMenu({
             <div data-settings-item>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/42">
-                  Graphics
+                  {copy.graphics}
                 </span>
                 <span className="text-[11px] font-semibold capitalize text-white/55">
                   {graphicsQuality === "auto"
-                    ? `Auto · ${resolvedGraphicsQuality}`
-                    : graphicsQuality}
+                    ? copy.autoWithQuality(GRAPHICS_LABELS[language][resolvedGraphicsQuality])
+                    : GRAPHICS_LABELS[language][graphicsQuality]}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-black/28 p-1">
@@ -394,7 +420,7 @@ export default function SettingsMenu({
                           : "text-white/52 hover:bg-white/[0.06] hover:text-white"
                       }`}
                     >
-                      {q}
+                      {GRAPHICS_LABELS[language][q]}
                     </button>
                   );
                 })}
@@ -409,15 +435,15 @@ export default function SettingsMenu({
               }
             >
               <div data-settings-item className="grid grid-cols-[0.75fr_0.75fr_1fr] gap-2">
-                {num("Day", "day", 1, 31, CalendarIcon)}
-                {num("Month", "month", 1, 12, CalendarIcon)}
-                {num("Year", "year", 1900, 2200, CalendarIcon)}
+                {num(copy.day, "day", 1, 31, CalendarIcon)}
+                {num(copy.month, "month", 1, 12, CalendarIcon)}
+                {num(copy.year, "year", 1900, 2200, CalendarIcon)}
               </div>
               <div data-settings-item className="grid grid-cols-[0.82fr_1.18fr] items-end gap-2">
-                {num("Hour", "hour", 0, 23, ClockIcon)}
+                {num(copy.hour, "hour", 0, 23, ClockIcon)}
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/42">
-                    Season
+                    {copy.season}
                   </span>
                   <span
                     className="flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm font-semibold capitalize"
@@ -428,14 +454,14 @@ export default function SettingsMenu({
                     }}
                   >
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: seasonColor }} />
-                    {season}
+                    {SEASON_LABELS[language][season] ?? season}
                   </span>
                 </div>
               </div>
 
               <div data-settings-item>
                 <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/42">
-                  Conditions
+                  {copy.conditions}
                 </span>
                 <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                   {SKIES.map((s) => {
@@ -454,7 +480,7 @@ export default function SettingsMenu({
                           }
                       >
                         <Icon className="h-4 w-4" />
-                        {s}
+                        {SKY_LABELS[language][s]}
                       </button>
                     );
                   })}
@@ -476,10 +502,10 @@ export default function SettingsMenu({
                     style={{ background: starsLive ? "#7ec85a" : "#6b7280" }}
                   />
                 </span>
-                Stargazers
+                {copy.stargazers}
               </span>
               <span className="text-[11px] font-semibold tabular-nums text-white/58">
-                {lastSync ? `synced ${relTime(Date.now() - lastSync)}` : "syncing..."}
+                {lastSync ? copy.synced(relTime(Date.now() - lastSync, language)) : copy.syncing}
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between gap-3">
@@ -490,7 +516,7 @@ export default function SettingsMenu({
                 />
               </div>
               <span className="min-w-[72px] text-right text-[11px] font-semibold tabular-nums text-[#9fd272]/82">
-                {nextMs === 0 ? "refreshing" : `next ${countdown(nextMs)}`}
+                {nextMs === 0 ? copy.refreshing : copy.next(countdown(nextMs))}
               </span>
             </div>
           </div>

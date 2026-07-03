@@ -16,7 +16,7 @@ export default function Hud({
   return (
     <>
       {/* Star count — always shown, read-only by default */}
-      <div className="anim-rise delay-1 absolute bottom-6 left-6 flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2.5 backdrop-blur-xl">
+      <div className="anim-rise delay-1 absolute bottom-6 left-24 flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2.5 backdrop-blur-xl sm:left-28">
         {devControls && (
           <button
             onClick={() => onChange(stars - 1)}

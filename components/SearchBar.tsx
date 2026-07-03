@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
+import { labelTier, UI_TEXT, type Language } from "@/lib/i18n";
 import { SearchIcon, StarIcon } from "./Icons";
 
 export type SearchResult = {
@@ -16,6 +17,7 @@ export default function SearchBar({
   onQuery,
   results,
   activeIndex,
+  language,
   onActive,
   onSelect,
 }: {
@@ -23,6 +25,7 @@ export default function SearchBar({
   onQuery: (q: string) => void;
   results: SearchResult[];
   activeIndex: number;
+  language: Language;
   onActive: (index: number) => void;
   onSelect: (result: SearchResult) => void;
 }) {
@@ -33,6 +36,7 @@ export default function SearchBar({
   const glowRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const open = focused && results.length > 0;
+  const copy = UI_TEXT[language].search;
 
   const activeResult = useMemo(
     () =>
@@ -156,7 +160,7 @@ export default function SearchBar({
                 inputRef.current?.blur();
               }
             }}
-            placeholder="Search a house"
+            placeholder={copy.placeholder}
             className="relative h-11 w-full bg-transparent pl-11 pr-4 text-sm font-medium text-white placeholder-white/38 outline-none"
           />
         </div>
@@ -202,9 +206,9 @@ export default function SearchBar({
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-semibold">{result.name}</span>
                       <span className="mt-0.5 block truncate text-[11px] text-white/38">
-                        House {result.index + 1}
-                        {result.tier ? ` · ${result.tier}` : ""}
-                        {result.contributor ? " · contributor" : ""}
+                        {copy.houseLabel} {result.index + 1}
+                        {result.tier ? ` · ${labelTier(language, result.tier)}` : ""}
+                        {result.contributor ? ` · ${copy.contributor}` : ""}
                       </span>
                     </span>
                     <span
@@ -221,14 +225,14 @@ export default function SearchBar({
               })}
             </div>
             <div className="relative border-t border-white/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/32">
-              Tab cycles · Enter selects
+              {copy.keyboardHint}
             </div>
           </div>
         )}
 
         {focused && results.length === 0 && (
           <div className="absolute left-0 right-0 top-[calc(100%+8px)] rounded-2xl border border-white/10 bg-[#0a100d]/82 px-4 py-3 text-center text-xs text-white/45 shadow-xl shadow-black/40 backdrop-blur-2xl">
-            No houses found
+            {copy.empty}
           </div>
         )}
       </div>

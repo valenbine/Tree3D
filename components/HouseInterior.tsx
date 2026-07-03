@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
+import { labelTier, UI_TEXT, type Language } from "@/lib/i18n";
 import type { Stargazer } from "@/lib/stargazers";
 import { nameForIndex } from "@/lib/names";
 import { tierForIndex, TIER_COLOR } from "@/lib/rarity";
@@ -130,10 +131,12 @@ export default function HouseInterior({
   index,
   stargazer,
   onClose,
+  language,
 }: {
   index: number;
   stargazer?: Stargazer | null;
   onClose: () => void;
+  language: Language;
 }) {
   const tier = stargazer?.tier ?? tierForIndex(index);
   const fallbackLogin = stargazer?.login ?? nameForIndex(index);
@@ -209,6 +212,7 @@ export default function HouseInterior({
   const displayName = user?.name ?? fallbackLogin;
   const login = user?.login ?? fallbackLogin;
   const avatar = user?.avatarUrl ?? stargazer?.avatarUrl;
+  const copy = UI_TEXT[language].houseInterior;
 
   const sortedRepos = useMemo(
     () =>
@@ -237,7 +241,7 @@ export default function HouseInterior({
       >
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={copy.close}
           className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg border border-[#3d444d] bg-[#0d1117]/80 text-[#9198a1] transition hover:bg-[#21262d] hover:text-white"
         >
           <CloseIcon className="h-4 w-4" />
@@ -260,7 +264,7 @@ export default function HouseInterior({
                   className="mb-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                   style={{ background: TIER_COLOR[tier] + "26", color: TIER_COLOR[tier] }}
                 >
-                  {tier}
+                  {labelTier(language, tier) ?? tier}
                 </span>
                 <h2 className="truncate text-xl font-semibold leading-tight text-[#f0f6fc]">
                   {displayName}
@@ -288,19 +292,19 @@ export default function HouseInterior({
               rel="noopener noreferrer"
               className="rounded-md border border-[#3d444d] bg-[#21262d] py-1.5 text-center text-sm font-medium text-[#e6edf3] transition hover:bg-[#30363d]"
             >
-              View GitHub profile
+              {copy.viewGitHubProfile}
             </a>
 
             {state === "done" && user && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[#9198a1]">
                 <span className="flex items-center gap-1">
                   <span className="font-semibold text-[#e6edf3]">{nf(user.followers)}</span>
-                  followers
+                  {copy.followers}
                 </span>
                 <span aria-hidden>·</span>
                 <span className="flex items-center gap-1">
                   <span className="font-semibold text-[#e6edf3]">{nf(user.following)}</span>
-                  following
+                  {copy.following}
                 </span>
               </div>
             )}
@@ -335,22 +339,17 @@ export default function HouseInterior({
             )}
             {state === "ratelimited" && (
               <div className="space-y-2 rounded-md border border-[#3d444d] bg-[#161b22] p-3 text-[13px] text-[#9198a1]">
-                <p>
-                  GitHub’s rate limit was hit, so the live profile couldn’t load right
-                  now. The full profile is on GitHub.
-                </p>
+                <p>{copy.rateLimitedShort}</p>
                 <button
                   onClick={() => setReloadKey((k) => k + 1)}
                   className="rounded-md border border-[#3d444d] bg-[#21262d] px-3 py-1 text-xs font-medium text-[#e6edf3] transition hover:bg-[#30363d]"
                 >
-                  Retry
+                  {copy.retry}
                 </button>
               </div>
             )}
             {state === "error" && (
-              <p className="text-[13px] text-[#9198a1]">
-                No public GitHub data for this house yet.
-              </p>
+              <p className="text-[13px] text-[#9198a1]">{copy.noPublicData}</p>
             )}
           </aside>
 
@@ -368,7 +367,7 @@ export default function HouseInterior({
                       active ? "font-semibold text-[#f0f6fc]" : "text-[#9198a1] hover:text-[#e6edf3]"
                     }`}
                   >
-                    <span className="capitalize">{t}</span>
+                    <span>{t === "overview" ? copy.overview : copy.repositories}</span>
                     {count != null && (
                       <span className="rounded-full bg-[#30363d] px-1.5 text-[11px] tabular-nums text-[#e6edf3]">
                         {count}
@@ -395,26 +394,23 @@ export default function HouseInterior({
               )}
 
               {state === "error" && (
-                <p className="text-sm text-[#9198a1]">No public GitHub data for this house yet.</p>
+                <p className="text-sm text-[#9198a1]">{copy.noPublicData}</p>
               )}
 
               {state === "ratelimited" && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-3 rounded-md border border-[#3d444d] bg-[#161b22] p-4 text-sm text-[#9198a1]">
-                    <span>
-                      GitHub’s rate limit was reached, so this profile couldn’t be loaded
-                      live. Try again in a moment.
-                    </span>
+                    <span>{copy.rateLimitedFull}</span>
                     <button
                       onClick={() => setReloadKey((k) => k + 1)}
                       className="rounded-md border border-[#3d444d] bg-[#21262d] px-3 py-1 text-xs font-medium text-[#e6edf3] transition hover:bg-[#30363d]"
                     >
-                      Retry
+                      {copy.retry}
                     </button>
                   </div>
                   {user && user.pinned.length > 0 && (
                     <section>
-                      <h3 className="mb-3 text-sm font-medium text-[#e6edf3]">Pinned</h3>
+                      <h3 className="mb-3 text-sm font-medium text-[#e6edf3]">{copy.pinned}</h3>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {user.pinned.map((r) => (
                           <RepoCard key={r.url} repo={r} />
@@ -442,7 +438,7 @@ export default function HouseInterior({
                   {user.pinned.length > 0 && (
                     <section>
                       <h3 className="mb-3 text-sm font-medium text-[#e6edf3]">
-                        {user.pinnedIsFallback ? "Popular repositories" : "Pinned"}
+                        {user.pinnedIsFallback ? copy.popularRepositories : copy.pinned}
                       </h3>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         {user.pinned.map((r) => (
@@ -453,7 +449,7 @@ export default function HouseInterior({
                   )}
 
                   {!user.readmeHtml && user.pinned.length === 0 && (
-                    <p className="text-sm text-[#9198a1]">Nothing to show here yet.</p>
+                    <p className="text-sm text-[#9198a1]">{copy.nothingYet}</p>
                   )}
                 </div>
               )}
@@ -461,7 +457,7 @@ export default function HouseInterior({
               {state === "done" && user && tab === "repositories" && (
                 <div className="space-y-3">
                   {sortedRepos.length === 0 && (
-                    <p className="text-sm text-[#9198a1]">No public repositories.</p>
+                    <p className="text-sm text-[#9198a1]">{copy.noPublicRepositories}</p>
                   )}
                   {sortedRepos.map((r) => (
                     <RepoCard key={r.url} repo={r} />
