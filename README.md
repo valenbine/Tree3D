@@ -11,6 +11,8 @@ The current version focuses on a Chinese-first bilingual experience, interactive
 
 ## Preview
 
+![Tree3D preview](./public/preview/tree3d-preview.gif)
+
 - Repository: `https://github.com/valenbine/Tree3D`
 - Default tracked repo: `valenbine/Tree3D`
 - Local run: `npm run dev`
