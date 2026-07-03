@@ -17,7 +17,7 @@ export type Owner = {
 
 export function ownerLogin(): string {
   if (process.env.GITHUB_USER) return process.env.GITHUB_USER;
-  const repo = process.env.GITHUB_REPO ?? "Plattnericus/ThreeJS_Portfolio";
+  const repo = process.env.GITHUB_REPO ?? "valenbine/Tree3D";
   return repo.split("/")[0];
 }
 

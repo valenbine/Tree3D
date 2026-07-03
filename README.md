@@ -120,7 +120,7 @@ Available variables:
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GITHUB_REPO` | No | Repository to visualize. Defaults to `Plattnericus/ThreeJS_Portfolio`. |
+| `GITHUB_REPO` | No | Repository to visualize. Defaults to `valenbine/Tree3D`. |
 | `GITHUB_TOKEN` | Recommended | GitHub token used server-side for higher API rate limits. |
 | `DEMO_STARS` | No | Fallback star count when GitHub data is unavailable. |
 | `NEXT_PUBLIC_DEV_CONTROLS` | No | Enables local development-only star editing controls. |
@@ -171,7 +171,7 @@ Tree3D is designed to deploy cleanly on Vercel.
 Recommended Vercel environment variables:
 
 ```text
-GITHUB_REPO=your-account/your-target-repo
+GITHUB_REPO=valenbine/Tree3D
 GITHUB_TOKEN=your-github-token
 DEMO_STARS=8
 ```

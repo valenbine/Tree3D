@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { Stargazer } from "@/lib/stargazers";
 import { tierFromProfile } from "@/lib/rarity";
 
-const REPO = process.env.GITHUB_REPO ?? "Plattnericus/ThreeJS_Portfolio";
+const REPO = process.env.GITHUB_REPO ?? "valenbine/Tree3D";
 const ENRICH = 30; // how many stargazers to enrich with a profile fetch
 
 // Visitors drive freshness: the client calls this route on page load and then
